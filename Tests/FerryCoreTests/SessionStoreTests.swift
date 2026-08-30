@@ -117,8 +117,35 @@ private final class ScanCounter: @unchecked Sendable {
     func increment() { lock.withLock { count += 1 } }
 }
 
-/// 실제 로그가 있을 때만 도는 성능 확인용 테스트.
-@Test func 실제_로그_스캔이_예산_안에_든다() throws {
+/// 웜 스캔(앱 실행 후 두 번째 팝오버부터)이 스펙 §7의 200ms/300세션 예산 안에 드는지.
+/// 사용자가 반복해서 체감하는 경로다.
+@Test func 실제_로그_웜스캔이_예산_안에_든다() throws {
+    let root = SessionStore.defaultRoot
+    try #require(FileManager.default.fileExists(atPath: root.path),
+                 "~/.claude/projects 가 없어 건너뜁니다")
+
+    let store = SessionStore(root: root)
+    store.refresh()                        // 캐시를 채운다
+
+    var samples: [TimeInterval] = []
+    for _ in 0..<5 {
+        let start = Date()
+        store.refresh()
+        samples.append(Date().timeIntervalSince(start))
+    }
+    let warm = samples.reduce(0, +) / Double(samples.count)
+    let count = store.projects.flatMap(\.sessions).count
+    let projected = warm / Double(count) * 300
+
+    print(String(format: "웜: 세션 %d개, 평균 %.2fms, 300개 환산 %.0fms (예산 200ms)",
+                 count, warm * 1000, projected * 1000))
+    #expect(projected < 0.2)
+}
+
+/// 콜드 스캔(앱 실행 후 첫 팝오버)의 회귀 가드.
+/// 스펙 §7대로 이것은 목표가 아니라 가드다 — 실행당 1회 비용이므로 200ms를 만족할 필요가 없다.
+/// 초과하면 파싱 경로가 퇴행한 것이다.
+@Test func 실제_로그_콜드스캔이_회귀_가드_안에_든다() throws {
     let root = SessionStore.defaultRoot
     try #require(FileManager.default.fileExists(atPath: root.path),
                  "~/.claude/projects 가 없어 건너뜁니다")
@@ -126,17 +153,12 @@ private final class ScanCounter: @unchecked Sendable {
     let store = SessionStore(root: root)
     let start = Date()
     store.refresh()
-    let elapsed = Date().timeIntervalSince(start)
+    let cold = Date().timeIntervalSince(start)
 
     let count = store.projects.flatMap(\.sessions).count
+    let perSession = cold / Double(count)
 
-    let perSession = elapsed / Double(count)
-    let budgetPerSession = 0.2 / 300.0   // 스펙 §7: 300개에 200ms
-    let projected = perSession * 300
-
-    print("세션 \(count)개, 첫 스캔 \(Int(elapsed * 1000))ms "
-          + "(세션당 \(String(format: "%.2f", perSession * 1000))ms, "
-          + "300개 환산 \(String(format: "%.2f", projected))s)")
-
-    #expect(perSession < budgetPerSession)
+    print(String(format: "콜드: 세션 %d개, %.0fms, 세션당 %.2fms (가드 5.00ms)",
+                 count, cold * 1000, perSession * 1000))
+    #expect(perSession < 0.005)
 }
