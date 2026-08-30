@@ -26,6 +26,29 @@ for res in "${BUILD_DIR}"/*.bundle; do
     cp -R "$res" "${APP}/Contents/Resources/"
 done
 
+# Icon Composer로 만든 icon.icon을 컴파일한다.
+# actool은 두 가지를 내놓는다 — macOS 26의 레이어드 렌더링용 Assets.car와,
+# 그 이전 버전이 읽는 고전 icon.icns. 둘 다 넣어야 macOS 14~26을 모두 커버한다.
+ICON_KEYS=""
+if [ -d "icon.icon" ]; then
+    ICON_TMP="$(mktemp -d)"
+    xcrun actool icon.icon \
+        --compile "${ICON_TMP}" \
+        --platform macosx \
+        --minimum-deployment-target 14.0 \
+        --app-icon icon \
+        --output-partial-info-plist "${ICON_TMP}/partial.plist" >/dev/null
+
+    cp "${ICON_TMP}/Assets.car" "${APP}/Contents/Resources/" 2>/dev/null || true
+    cp "${ICON_TMP}/icon.icns" "${APP}/Contents/Resources/" 2>/dev/null || true
+    rm -rf "${ICON_TMP}"
+
+    ICON_KEYS="    <key>CFBundleIconFile</key>          <string>icon</string>
+    <key>CFBundleIconName</key>          <string>icon</string>"
+else
+    echo "경고: icon.icon 이 없어 기본 아이콘으로 빌드합니다."
+fi
+
 cat > "${APP}/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -40,6 +63,7 @@ cat > "${APP}/Contents/Info.plist" <<PLIST
     <key>CFBundleVersion</key>           <string>${VERSION}</string>
     <key>LSMinimumSystemVersion</key>    <string>14.0</string>
     <key>LSUIElement</key>               <true/>
+${ICON_KEYS}
     <key>CFBundleDevelopmentRegion</key>  <string>en</string>
     <key>CFBundleLocalizations</key>
     <array>
