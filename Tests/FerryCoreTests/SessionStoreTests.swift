@@ -127,8 +127,13 @@ private func addLog(_ root: URL, projectDir: String, sessionId: String,
             == sync.projects.flatMap(\.sessions).map(\.id))
 }
 
+/// 두 refreshAsync가 겹쳐도 결과를 잃지 않는지 확인한다.
+/// 주의: 두 호출 모두 같은 픽스처를 스캔하므로 순서가 어떻든 결과가 같다 —
+/// 이 테스트는 "먼저 끝난 낡은 결과로 덮어써지는" 버그는 잡지 못한다.
+/// 대신 취소 가드(guard !Task.isCancelled)가 잘못 걸려 projects가 빈 채로
+/// 남는 교착·유실은 잡아낸다.
 @MainActor
-@Test func 겹친_refreshAsync는_최종상태가_올바르다() async throws {
+@Test func 겹친_refreshAsync가_교착하거나_결과를_잃지_않는다() async throws {
     let root = try makeRoot()
     _ = try addLog(root, projectDir: "-a", sessionId: "s1",
                    contents: sampleLog(sessionId: "s1", cwd: "/Codes/a", title: "첫째"))
@@ -168,6 +173,7 @@ private final class ScanCounter: @unchecked Sendable {
     }
     let warm = samples.reduce(0, +) / Double(samples.count)
     let count = store.projects.flatMap(\.sessions).count
+    try #require(count > 0, "세션이 없어 건너뜁니다")
     let projected = warm / Double(count) * 300
 
     print(String(format: "웜: 세션 %d개, 평균 %.2fms, 300개 환산 %.0fms (예산 200ms)",
@@ -189,6 +195,7 @@ private final class ScanCounter: @unchecked Sendable {
     let cold = Date().timeIntervalSince(start)
 
     let count = store.projects.flatMap(\.sessions).count
+    try #require(count > 0, "세션이 없어 건너뜁니다")
     let perSession = cold / Double(count)
 
     print(String(format: "콜드: 세션 %d개, %.0fms, 세션당 %.2fms (가드 5.00ms)",

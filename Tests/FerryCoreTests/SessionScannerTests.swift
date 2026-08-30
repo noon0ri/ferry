@@ -112,6 +112,25 @@ import Foundation
     #expect(session.title == "맨 앞의 제목")
 }
 
+@Test func 큰_파일도_꼬리에_제목이_있으면_그대로_읽는다() throws {
+    // 실제 세션 대부분이 타는 경로: 파일이 256KB를 넘고, 최신 ai-title은 끝부분에 있다.
+    let filler = (0..<2000).map { i in
+        "{\"type\":\"assistant\",\"sessionId\":\"s1\",\"cwd\":\"/tmp/p\",\"gitBranch\":\"main\",\"n\":\(i),\"pad\":\"\(String(repeating: "x", count: 200))\"}"
+    }.joined(separator: "\n")
+    let text = """
+    {"type":"user","sessionId":"s1","cwd":"/tmp/p","gitBranch":"main"}
+    \(filler)
+    {"type":"ai-title","aiTitle":"꼬리에 있는 제목","sessionId":"s1"}
+    """
+    #expect(text.utf8.count > SessionScanner.tailBytes)
+
+    let url = try makeFixture(text)
+    let session = try #require(SessionScanner.scan(logPath: url))
+    #expect(session.title == "꼬리에 있는 제목")
+    #expect(session.cwd == "/tmp/p")
+    #expect(session.gitBranch == "main")
+}
+
 @Test func 꼬리_읽기는_잘림_여부를_알려준다() throws {
     let small = try makeFixture("한 줄\n")
     #expect(try SessionScanner.readTail(small, bytes: 1024).truncated == false)
