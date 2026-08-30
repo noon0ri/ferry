@@ -22,9 +22,15 @@ struct MenuBarView: View {
         }
         .frame(width: 320)
         .task {
-            await store.refreshAsync()
-            applyInitialExpansion()
-            updateMissingPaths()
+            // .task는 뷰 생명주기당 한 번만 돈다. MenuBarExtra(.window)는 팝오버를
+            // 닫아도 뷰를 버리지 않으므로, 한 번만 스캔하면 목록이 그대로 굳는다.
+            // 웜 스캔이 ~1ms라 주기적으로 다시 읽어도 비용이 없다.
+            while !Task.isCancelled {
+                await store.refreshAsync()
+                updateMissingPaths()
+                applyInitialExpansion()
+                try? await Task.sleep(for: .seconds(3))
+            }
         }
     }
 
@@ -110,7 +116,10 @@ struct MenuBarView: View {
     }
 
     private func open(_ session: Session) {
-        guard !missingPaths.contains(session.cwd) else {
+        // 클릭 시점에 직접 확인한다. 마지막 새로고침 이후 폴더가 사라졌을 수 있고,
+        // 클릭 한 번에 stat 한 번은 렌더 경로와 달리 비용이 아니다.
+        // missingPaths는 렌더링(흐리게 표시) 전용으로만 쓴다.
+        guard FileManager.default.fileExists(atPath: session.cwd) else {
             notice = "폴더가 없습니다: \(session.cwd)"
             return
         }

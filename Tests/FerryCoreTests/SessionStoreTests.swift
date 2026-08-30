@@ -127,6 +127,21 @@ private func addLog(_ root: URL, projectDir: String, sessionId: String,
             == sync.projects.flatMap(\.sessions).map(\.id))
 }
 
+@MainActor
+@Test func 겹친_refreshAsync는_최종상태가_올바르다() async throws {
+    let root = try makeRoot()
+    _ = try addLog(root, projectDir: "-a", sessionId: "s1",
+                   contents: sampleLog(sessionId: "s1", cwd: "/Codes/a", title: "첫째"))
+    let store = SessionStore(root: root)
+
+    let taskA = Task { @MainActor in await store.refreshAsync() }
+    let taskB = Task { @MainActor in await store.refreshAsync() }
+    _ = await (taskA.value, taskB.value)
+
+    #expect(store.projects.count == 1)
+    #expect(store.projects.first?.sessions.map(\.id) == ["s1"])
+}
+
 /// 스캔 호출 횟수를 세는 테스트 보조 타입.
 private final class ScanCounter: @unchecked Sendable {
     private let lock = NSLock()

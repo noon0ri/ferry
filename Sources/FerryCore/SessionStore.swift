@@ -9,6 +9,7 @@ public final class SessionStore {
     private let root: URL
     private let scan: @Sendable (URL) -> Session?
     private var cache: [URL: CacheEntry] = [:]
+    private var inFlight: Task<Void, Never>?
 
     struct CacheEntry: Sendable {
         let mtime: Date
@@ -38,17 +39,22 @@ public final class SessionStore {
     /// 팝오버가 열릴 때 UI를 막지 않기 위한 경로다.
     @MainActor
     public func refreshAsync() async {
-        let root = self.root
-        let scan = self.scan
-        let snapshot = self.cache
+        inFlight?.cancel()
+        let task = Task { @MainActor in
+            let root = self.root
+            let scan = self.scan
+            let snapshot = self.cache
 
-        let task = Task.detached(priority: .userInitiated) {
-            SessionStore.scanAll(root: root, scan: scan, cache: snapshot)
+            let result = await Task.detached(priority: .userInitiated) {
+                SessionStore.scanAll(root: root, scan: scan, cache: snapshot)
+            }.value
+
+            guard !Task.isCancelled else { return }
+            self.cache = result.cache
+            self.projects = Self.group(result.sessions)
         }
-        let result = await task.value
-
-        self.cache = result.cache
-        self.projects = Self.group(result.sessions)
+        inFlight = task
+        await task.value
     }
 
     /// 스캔 본체. main actor와 무관한 순수 작업이라 어느 스레드에서든 돌 수 있다.
