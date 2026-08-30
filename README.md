@@ -15,12 +15,17 @@ So you stop closing terminal windows. Even a session you return to once a week s
 - Shows every session under `~/.claude/projects/`, grouped by working directory
 - Session titles come from what is already recorded in the log, so you see "Build an interactive 3D icon set" rather than a UUID
 - Clicking one opens Terminal in that folder and runs `claude --resume`
-- Sessions active within the last 60 seconds get a green dot; the list refreshes every 3 seconds
-- Right-click to rename or delete
+- **If that session's Terminal window is already open, it is brought to the front instead of opening a new one**
+- The dot tells you which will happen: green means an open window to focus, grey means a new one
+- Hovering a group row reveals a `+` that **starts a new session** in that folder
+- Right-click to rename or delete (right-click a group for a new session)
+- The list refreshes every 3 seconds
 
 Renaming writes the same record format Claude Code itself uses, so the new name also appears in the `claude --resume` picker and the terminal title. The name does not live in two places.
 
 Deleting moves both the session log and its subagent logs to the Trash. Subagent logs are commonly 10–30× larger than the log itself, so the confirmation shows the combined size.
+
+Open windows are matched by tty. A project usually holds several sessions, so the path alone cannot identify a window. Because tty numbers get recycled, the session-leader process on that tty — its pid and start time — is recorded alongside as a fingerprint. Checking costs one sysctl call: no AppleScript, no permission.
 
 ## Requirements
 
@@ -92,7 +97,7 @@ Measured with 23 sessions: 92 ms for the first scan, 1 ms after that. Only files
 ## Development
 
 ```bash
-swift test      # 49 tests
+swift test      # 63 tests
 swift build
 swift run FerryApp
 ```
