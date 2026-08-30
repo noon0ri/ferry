@@ -19,3 +19,5 @@
 "rename.cancel" = "Cancel";
 "notice.renameFailed" = "Couldn't rename: %@";
 "action.newSession" = "New Session Here";
+"dot.hasTerminal" = "Terminal window is open — click to bring it to the front";
+"dot.noTerminal" = "Click to open a new Terminal window";

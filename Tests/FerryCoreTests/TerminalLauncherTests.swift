@@ -74,6 +74,18 @@ private final class StubRunner: ScriptRunner, @unchecked Sendable {
     }
 }
 
+/// 지문 값을 테스트 도중 바꿀 수 있게 담아두는 상자.
+/// @Sendable 클로저가 가변 변수를 캡처할 수 없어서 필요하다.
+private final class Box: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: String?
+    init(_ value: String?) { stored = value }
+    var value: String? {
+        get { lock.withLock { stored } }
+        set { lock.withLock { stored = newValue } }
+    }
+}
+
 /// 메모리 저장소. 실제 UserDefaults를 건드리지 않는다.
 private final class MemoryStore: SessionTerminalRegistry.Store, @unchecked Sendable {
     private let lock = NSLock()
@@ -86,7 +98,7 @@ private final class MemoryStore: SessionTerminalRegistry.Store, @unchecked Senda
 
 @Test func 열려있는_창이_있으면_포커스만_한다() {
     let store = MemoryStore()
-    let registry = SessionTerminalRegistry(store: store)
+    let registry = SessionTerminalRegistry(store: store, fingerprint: { _ in "fp" })
     registry.record(tty: "/dev/ttys003", for: "s1")
 
     let runner = StubRunner(shouldThrow: false)
@@ -103,7 +115,7 @@ private final class MemoryStore: SessionTerminalRegistry.Store, @unchecked Senda
 
 @Test func 기록이_없으면_실행하고_tty를_기록한다() {
     let store = MemoryStore()
-    let registry = SessionTerminalRegistry(store: store)
+    let registry = SessionTerminalRegistry(store: store, fingerprint: { _ in "fp" })
 
     let runner = StubRunner(shouldThrow: false)
     runner.responses = ["/dev/ttys007"]
@@ -114,12 +126,12 @@ private final class MemoryStore: SessionTerminalRegistry.Store, @unchecked Senda
     #expect(outcome == .launched)
     #expect(runner.scripts.count == 1)
     #expect(runner.scripts[0].contains("--resume s1"))
-    #expect(registry.tty(for: "s1") == "/dev/ttys007")
+    #expect(registry.liveTTY(for: "s1") == "/dev/ttys007")
 }
 
 @Test func 창이_닫혔으면_새로_실행한다() {
     let store = MemoryStore()
-    let registry = SessionTerminalRegistry(store: store)
+    let registry = SessionTerminalRegistry(store: store, fingerprint: { _ in "fp" })
     registry.record(tty: "/dev/ttys003", for: "s1")
 
     let runner = StubRunner(shouldThrow: false)
@@ -131,12 +143,12 @@ private final class MemoryStore: SessionTerminalRegistry.Store, @unchecked Senda
     #expect(outcome == .launched)
     #expect(runner.scripts.count == 2)
     #expect(runner.scripts[1].contains("--resume s1"))
-    #expect(registry.tty(for: "s1") == "/dev/ttys009")   // 새 tty로 갱신
+    #expect(registry.liveTTY(for: "s1") == "/dev/ttys009")   // 새 tty로 갱신
 }
 
 @Test func 실행에_실패하면_낡은_기록을_지운다() {
     let store = MemoryStore()
-    let registry = SessionTerminalRegistry(store: store)
+    let registry = SessionTerminalRegistry(store: store, fingerprint: { _ in "fp" })
     registry.record(tty: "/dev/ttys003", for: "s1")
 
     // 포커스도 실행도 모두 실패하는 상황(자동화 권한 거부)
@@ -149,13 +161,13 @@ private final class MemoryStore: SessionTerminalRegistry.Store, @unchecked Senda
 
     #expect(outcome == .copiedToClipboard)
     #expect(copied == ["cd '/Codes/p' && claude --resume s1"])
-    #expect(registry.tty(for: "s1") == nil)
+    #expect(registry.liveTTY(for: "s1") == nil)
 }
 
 @Test func 레지스트리는_빈_tty를_기록하지_않는다() {
-    let registry = SessionTerminalRegistry(store: MemoryStore())
+    let registry = SessionTerminalRegistry(store: MemoryStore(), fingerprint: { _ in "fp" })
     registry.record(tty: "   ", for: "s1")
-    #expect(registry.tty(for: "s1") == nil)
+    #expect(registry.liveTTY(for: "s1") == nil)
 }
 
 @Test func 새_세션_명령은_resume_없이_cd만_잇는다() {
@@ -196,12 +208,55 @@ private final class MemoryStore: SessionTerminalRegistry.Store, @unchecked Senda
 @Test func 새_세션은_tty를_기록하지_않는다() {
     // 새 세션은 아직 sessionId가 없다. 기록은 다음 스캔에서 그 세션을 발견한 뒤
     // 사용자가 클릭할 때 만들어진다.
-    let registry = SessionTerminalRegistry(store: MemoryStore())
+    let registry = SessionTerminalRegistry(store: MemoryStore(), fingerprint: { _ in "fp" })
     let runner = StubRunner(shouldThrow: false)
     runner.responses = ["/dev/ttys011"]
     let launcher = TerminalLauncher(runner: runner, copyToClipboard: { _ in }, registry: registry)
 
     _ = launcher.launchNew(inDirectory: "/Codes/p")
 
-    #expect(registry.tty(for: "/Codes/p") == nil)
+    #expect(registry.liveTTY(for: "/Codes/p") == nil)
+}
+
+@Test func 창이_닫히면_살아있지_않다고_본다() {
+    // 지문 함수가 nil을 주면 장치 파일이 사라진 상태다.
+    let store = MemoryStore()
+    let mark = Box("fp")
+    let registry = SessionTerminalRegistry(store: store, fingerprint: { _ in mark.value })
+    registry.record(tty: "/dev/ttys002", for: "s1")
+    #expect(registry.isLive("s1"))
+
+    mark.value = nil
+    #expect(!registry.isLive("s1"))
+    #expect(registry.liveTTY(for: "s1") == nil)
+}
+
+@Test func tty_번호가_재사용되면_다른_창으로_본다() {
+    // 같은 번호라도 할당 시각이 다르면 남의 창이다. 이걸 놓치면 엉뚱한 창을 포커스한다.
+    let store = MemoryStore()
+    let mark = Box("ctime-1")
+    let registry = SessionTerminalRegistry(store: store, fingerprint: { _ in mark.value })
+    registry.record(tty: "/dev/ttys002", for: "s1")
+    #expect(registry.isLive("s1"))
+
+    mark.value = "ctime-2"   // 창이 닫히고 같은 번호가 새로 할당됨
+    #expect(!registry.isLive("s1"))
+}
+
+@Test func 재사용된_tty면_포커스하지_않고_새로_연다() {
+    let store = MemoryStore()
+    let mark = Box("ctime-1")
+    let registry = SessionTerminalRegistry(store: store, fingerprint: { _ in mark.value })
+    registry.record(tty: "/dev/ttys002", for: "s1")
+    mark.value = "ctime-2"
+
+    let runner = StubRunner(shouldThrow: false)
+    runner.responses = ["/dev/ttys005"]
+    let launcher = TerminalLauncher(runner: runner, copyToClipboard: { _ in }, registry: registry)
+
+    let outcome = launcher.launch(makeSession())
+
+    #expect(outcome == .launched)
+    #expect(runner.scripts.count == 1)                   // 포커스 시도조차 하지 않는다
+    #expect(runner.scripts[0].contains("--resume s1"))
 }

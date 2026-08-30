@@ -20,6 +20,7 @@ struct MenuBarView: View {
     @State private var notice: String?
     @State private var noticeSetAt: Date?
     @State private var missingPaths: Set<String> = []
+    @State private var liveSessions: Set<String> = []
     @State private var loadState: LoadState = .loading
     @State private var pendingDelete: Session?
     @State private var pendingRename: Session?
@@ -31,6 +32,7 @@ struct MenuBarView: View {
     private let renamer = SessionRenamer()
 
     private let launcher = TerminalLauncher()
+    private let registry = SessionTerminalRegistry()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -55,6 +57,7 @@ struct MenuBarView: View {
             while !Task.isCancelled {
                 await store.refreshAsync()
                 updateMissingPaths()
+                updateLiveSessions()
                 applyInitialExpansion()
                 loadState = .loaded
                 clearStaleNotice()
@@ -70,7 +73,8 @@ struct MenuBarView: View {
                     DisclosureGroup(isExpanded: binding(for: project)) {
                         ForEach(project.sessions) { session in
                             SessionRow(session: session,
-                                       exists: !missingPaths.contains(session.cwd)) { open(session) }
+                                       exists: !missingPaths.contains(session.cwd),
+                                       hasTerminal: liveSessions.contains(session.id)) { open(session) }
                                 .contextMenu {
                                     Button(L("action.renameSession")) {
                                         renameText = session.title
@@ -296,6 +300,7 @@ struct MenuBarView: View {
                     Task {
                         await store.refreshAsync()
                         updateMissingPaths()
+                        updateLiveSessions()
                     }
                 }
                 Spacer()
@@ -340,6 +345,7 @@ struct MenuBarView: View {
         dismissPanels()
         do {
             try remover.remove(session)
+            registry.forget(session.id)
         } catch {
             setNotice(L("notice.deleteFailed", error.localizedDescription))
             return
@@ -348,6 +354,12 @@ struct MenuBarView: View {
             await store.refreshAsync()
             updateMissingPaths()
         }
+    }
+
+    /// 터미널이 열려 있는 세션 집합. 세션당 stat 한 번이라 새로고침마다 다시 계산해도 싸다.
+    private func updateLiveSessions() {
+        let ids = store.projects.flatMap(\.sessions).map(\.id)
+        liveSessions = Set(ids.filter { registry.isLive($0) })
     }
 
     private func newSession(in project: Project) {
@@ -396,18 +408,19 @@ struct MenuBarView: View {
 private struct SessionRow: View {
     let session: Session
     let exists: Bool
+    /// 이 세션의 터미널 창이 아직 열려 있는가. 점 색과 클릭 결과가 여기서 갈린다.
+    let hasTerminal: Bool
     let action: () -> Void
-
-    private var isActive: Bool {
-        Date().timeIntervalSince(session.modifiedAt) < 60
-    }
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
+                // 초록 = 창이 열려 있음(클릭하면 그 창으로), 회색 = 클릭하면 새 창.
+                // 점이 클릭의 결과를 미리 알려준다.
                 Circle()
-                    .fill(isActive ? Color.green : Color.secondary.opacity(0.4))
+                    .fill(hasTerminal ? Color.green : Color.secondary.opacity(0.4))
                     .frame(width: 7, height: 7)
+                    .help(hasTerminal ? L("dot.hasTerminal") : L("dot.noTerminal"))
                 VStack(alignment: .leading, spacing: 1) {
                     Text(session.title)
                         .lineLimit(1)

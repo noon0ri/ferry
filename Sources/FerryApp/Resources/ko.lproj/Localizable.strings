@@ -19,3 +19,5 @@
 "rename.cancel" = "취소";
 "notice.renameFailed" = "이름을 바꾸지 못했습니다: %@";
 "action.newSession" = "여기에 새 세션";
+"dot.hasTerminal" = "터미널 창이 열려 있습니다 — 클릭하면 그 창으로";
+"dot.noTerminal" = "클릭하면 새 터미널 창이 열립니다";

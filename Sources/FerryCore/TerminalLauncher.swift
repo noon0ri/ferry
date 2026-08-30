@@ -84,7 +84,7 @@ public struct TerminalLauncher {
     /// 없으면 새 창에서 재개한다.
     @discardableResult
     public func launch(_ session: Session) -> LaunchOutcome {
-        if let tty = registry.tty(for: session.id), focusTerminal(tty: tty) {
+        if let tty = registry.liveTTY(for: session.id), focusTerminal(tty: tty) {
             return .focused
         }
         let outcome = send(Self.command(cwd: session.cwd, sessionId: session.id),
