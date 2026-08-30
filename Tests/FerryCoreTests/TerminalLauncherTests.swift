@@ -260,3 +260,16 @@ private final class MemoryStore: SessionTerminalRegistry.Store, @unchecked Senda
     #expect(runner.scripts.count == 1)                   // 포커스 시도조차 하지 않는다
     #expect(runner.scripts[0].contains("--resume s1"))
 }
+
+@Test func 실제_tty_지문은_존재와_생사를_구분한다() throws {
+    // 살아있는 tty에는 지문이 있고, 없는 장치에는 없다.
+    let live = (0...9).map { "/dev/ttys00\($0)" }
+        .filter { FileManager.default.fileExists(atPath: $0) }
+    try #require(!live.isEmpty, "살아있는 tty가 없어 건너뜁니다")
+
+    #expect(TTYProbe.fingerprint(of: live[0]) != nil)
+    #expect(TTYProbe.fingerprint(of: "/dev/ttys999") == nil)
+
+    // 두 번 읽어도 같아야 한다. ctime을 지문으로 썼을 때 여기서 깨졌다.
+    #expect(TTYProbe.fingerprint(of: live[0]) == TTYProbe.fingerprint(of: live[0]))
+}

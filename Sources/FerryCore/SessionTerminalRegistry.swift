@@ -1,5 +1,4 @@
 import Foundation
-import Darwin
 
 /// 세션이 어느 터미널에서 열렸는지 기억하고, 그 터미널이 아직 살아 있는지 답한다.
 ///
@@ -8,11 +7,11 @@ import Darwin
 ///
 /// 다만 tty 번호는 **재사용된다**. 창을 닫으면 장치 파일이 사라지고, 다음에 열리는
 /// 창이 같은 번호를 받는 일이 흔하다. 번호만 보면 남의 창을 내 세션으로 착각한다.
-/// 그래서 할당 시각(ctime)을 함께 기록해 지문으로 쓴다. 번호가 같아도 ctime이 다르면
-/// 다른 창이다.
+/// 그래서 `TTYProbe`가 만드는 지문(그 tty의 세션 리더 프로세스)을 함께 기록한다.
+/// 번호가 같아도 지문이 다르면 다른 창이다.
 ///
-/// 확인 비용은 `stat` 한 번이다. AppleScript도 권한도 필요 없어서 목록을 그릴 때마다
-/// 세션별로 물어봐도 부담이 없다.
+/// 확인은 sysctl 한 번이라 AppleScript도 권한도 프로세스 스폰도 필요 없다.
+/// 목록을 그릴 때마다 세션별로 물어봐도 부담이 없다.
 public struct SessionTerminalRegistry: Sendable {
 
     /// 테스트가 메모리 구현을 끼워 넣을 수 있도록 최소 인터페이스만 요구한다.
@@ -28,16 +27,9 @@ public struct SessionTerminalRegistry: Sendable {
     private static let separator = "\u{1F}"
 
     public init(store: Store = UserDefaults.standard,
-                fingerprint: @escaping @Sendable (String) -> String? = SessionTerminalRegistry.ctime) {
+                fingerprint: @escaping @Sendable (String) -> String? = TTYProbe.fingerprint) {
         self.store = store
         self.fingerprint = fingerprint
-    }
-
-    /// 장치 파일의 status change time. 파일이 없으면 nil — 창이 닫혔다는 뜻이다.
-    public static func ctime(of path: String) -> String? {
-        var info = stat()
-        guard stat(path, &info) == 0 else { return nil }
-        return "\(info.st_ctimespec.tv_sec).\(info.st_ctimespec.tv_nsec)"
     }
 
     public func record(tty: String, for sessionId: String) {
