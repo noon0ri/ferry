@@ -7,6 +7,7 @@ struct MenuBarView: View {
     @State private var expanded: Set<String> = []
     @State private var didSetInitialExpansion = false
     @State private var notice: String?
+    @State private var missingPaths: Set<String> = []
 
     private let launcher = TerminalLauncher()
 
@@ -21,8 +22,9 @@ struct MenuBarView: View {
         }
         .frame(width: 320)
         .task {
-            store.refresh()
+            await store.refreshAsync()
             applyInitialExpansion()
+            updateMissingPaths()
         }
     }
 
@@ -32,7 +34,8 @@ struct MenuBarView: View {
                 ForEach(store.projects) { project in
                     DisclosureGroup(isExpanded: binding(for: project)) {
                         ForEach(project.sessions) { session in
-                            SessionRow(session: session) { open(session) }
+                            SessionRow(session: session,
+                                       exists: !missingPaths.contains(session.cwd)) { open(session) }
                         }
                     } label: {
                         HStack {
@@ -68,7 +71,12 @@ struct MenuBarView: View {
             }
             Divider()
             HStack {
-                Button("새로고침") { store.refresh() }
+                Button("새로고침") {
+                    Task {
+                        await store.refreshAsync()
+                        updateMissingPaths()
+                    }
+                }
                 Spacer()
                 Button("종료") { NSApplication.shared.terminate(nil) }
             }
@@ -94,8 +102,15 @@ struct MenuBarView: View {
         didSetInitialExpansion = true
     }
 
+    /// cwd 존재 여부는 새로고침 시점에 한 번만 확인한다.
+    /// 뷰 body에서 확인하면 스크롤·호버 같은 무관한 재렌더마다 파일시스템을 두드리게 된다.
+    private func updateMissingPaths() {
+        let paths = Set(store.projects.flatMap(\.sessions).map(\.cwd))
+        missingPaths = Set(paths.filter { !FileManager.default.fileExists(atPath: $0) })
+    }
+
     private func open(_ session: Session) {
-        guard FileManager.default.fileExists(atPath: session.cwd) else {
+        guard !missingPaths.contains(session.cwd) else {
             notice = "폴더가 없습니다: \(session.cwd)"
             return
         }
@@ -110,14 +125,11 @@ struct MenuBarView: View {
 
 private struct SessionRow: View {
     let session: Session
+    let exists: Bool
     let action: () -> Void
 
     private var isActive: Bool {
         Date().timeIntervalSince(session.modifiedAt) < 60
-    }
-
-    private var folderExists: Bool {
-        FileManager.default.fileExists(atPath: session.cwd)
     }
 
     var body: some View {
@@ -145,7 +157,7 @@ private struct SessionRow: View {
             .padding(.leading, 4)
         }
         .buttonStyle(.plain)
-        .opacity(folderExists ? 1 : 0.45)
+        .opacity(exists ? 1 : 0.45)
         .help(session.cwd)
     }
 

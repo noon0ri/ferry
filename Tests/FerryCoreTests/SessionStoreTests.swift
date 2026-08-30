@@ -109,6 +109,24 @@ private func addLog(_ root: URL, projectDir: String, sessionId: String,
     #expect(store.projects.isEmpty)
 }
 
+@Test @MainActor func refreshAsync는_refresh와_같은_결과를_낸다() async throws {
+    let root = try makeRoot()
+    _ = try addLog(root, projectDir: "-a", sessionId: "s1",
+                   contents: sampleLog(sessionId: "s1", cwd: "/Codes/a", title: "첫째"))
+    _ = try addLog(root, projectDir: "-b", sessionId: "s2",
+                   contents: sampleLog(sessionId: "s2", cwd: "/Codes/b", title: "둘째"))
+
+    let sync = SessionStore(root: root)
+    sync.refresh()
+
+    let async = SessionStore(root: root)
+    await async.refreshAsync()
+
+    #expect(async.projects.map(\.path) == sync.projects.map(\.path))
+    #expect(async.projects.flatMap(\.sessions).map(\.id)
+            == sync.projects.flatMap(\.sessions).map(\.id))
+}
+
 /// 스캔 호출 횟수를 세는 테스트 보조 타입.
 private final class ScanCounter: @unchecked Sendable {
     private let lock = NSLock()

@@ -8,7 +8,12 @@ public final class SessionStore {
 
     private let root: URL
     private let scan: @Sendable (URL) -> Session?
-    private var cache: [URL: (mtime: Date, session: Session)] = [:]
+    private var cache: [URL: CacheEntry] = [:]
+
+    struct CacheEntry: Sendable {
+        let mtime: Date
+        let session: Session
+    }
 
     public static var defaultRoot: URL {
         FileManager.default.homeDirectoryForCurrentUser
@@ -24,17 +29,42 @@ public final class SessionStore {
     /// 로그 루트를 훑어 projects를 다시 만든다.
     /// mtime이 바뀌지 않은 파일은 캐시를 재사용한다.
     public func refresh() {
+        let result = Self.scanAll(root: root, scan: scan, cache: cache)
+        cache = result.cache
+        projects = Self.group(result.sessions)
+    }
+
+    /// 스캔을 백그라운드에서 돌리고 결과만 main에서 반영한다.
+    /// 팝오버가 열릴 때 UI를 막지 않기 위한 경로다.
+    @MainActor
+    public func refreshAsync() async {
+        let root = self.root
+        let scan = self.scan
+        let snapshot = self.cache
+
+        let task = Task.detached(priority: .userInitiated) {
+            SessionStore.scanAll(root: root, scan: scan, cache: snapshot)
+        }
+        let result = await task.value
+
+        self.cache = result.cache
+        self.projects = Self.group(result.sessions)
+    }
+
+    /// 스캔 본체. main actor와 무관한 순수 작업이라 어느 스레드에서든 돌 수 있다.
+    static func scanAll(root: URL,
+                        scan: @Sendable (URL) -> Session?,
+                        cache: [URL: CacheEntry]) -> (sessions: [Session], cache: [URL: CacheEntry]) {
         let fm = FileManager.default
         guard let projectDirs = try? fm.contentsOfDirectory(
             at: root, includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]
         ) else {
-            projects = []
-            return
+            return ([], cache)
         }
 
         var sessions: [Session] = []
-        var freshCache: [URL: (mtime: Date, session: Session)] = [:]
+        var freshCache: [URL: CacheEntry] = [:]
 
         for dir in projectDirs {
             guard (try? dir.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
@@ -59,13 +89,12 @@ public final class SessionStore {
                 guard let session = scan(file) else { continue }
                 sessions.append(session)
                 if let mtime {
-                    freshCache[file] = (mtime, session)
+                    freshCache[file] = CacheEntry(mtime: mtime, session: session)
                 }
             }
         }
 
-        cache = freshCache
-        projects = Self.group(sessions)
+        return (sessions, freshCache)
     }
 
     /// cwd로 묶고 스펙 §4의 표시 규칙대로 정렬한다.
