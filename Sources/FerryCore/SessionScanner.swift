@@ -48,6 +48,46 @@ public struct SessionScanner {
         return fields
     }
 
+    /// 꼬리에서 뒤에서부터 훑어 필요한 것만 찾고 조기 종료한다.
+    /// aiTitle·cwd·gitBranch·sessionId는 모두 "마지막 값이 이긴다"이므로
+    /// 끝에서부터 처음 만난 값이 곧 정답이다.
+    /// firstUserPrompt는 채우지 않는다 — 그것이 필요한 경우는 aiTitle이 없는 경우뿐이고,
+    /// 그 경우는 scan()이 전체 재읽기(정방향 parse)로 처리한다.
+    static func parseTail(_ text: String, dropFirstLine: Bool) -> ParsedFields {
+        var fields = ParsedFields()
+        var lines = text.split(separator: "\n", omittingEmptySubsequences: true)
+        if dropFirstLine && !lines.isEmpty {
+            lines.removeFirst()
+        }
+
+        for line in lines.reversed() {
+            guard let data = line.data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: data),
+                  let record = obj as? [String: Any]
+            else { continue }
+
+            if fields.sessionId == nil, let id = record["sessionId"] as? String {
+                fields.sessionId = id
+            }
+            if fields.aiTitle == nil, let type = record["type"] as? String, type == "ai-title",
+               let title = record["aiTitle"] as? String, !title.isEmpty {
+                fields.aiTitle = title
+            }
+            if fields.cwd == nil, let cwd = record["cwd"] as? String, !cwd.isEmpty {
+                fields.cwd = cwd
+            }
+            if fields.gitBranch == nil, let branch = record["gitBranch"] as? String, !branch.isEmpty {
+                fields.gitBranch = branch
+            }
+
+            // 제목과 cwd, 세션 id를 다 찾았으면 더 볼 필요가 없다.
+            if fields.aiTitle != nil && fields.cwd != nil && fields.sessionId != nil {
+                break
+            }
+        }
+        return fields
+    }
+
     /// content는 문자열이거나 `[{"type":"text","text":...}]` 배열이다.
     private static func extractText(from content: Any?) -> String? {
         var raw: String?
@@ -86,7 +126,9 @@ public struct SessionScanner {
         else { return nil }
 
         guard let tail = try? readTail(logPath) else { return nil }
-        var fields = parse(tail.text, dropFirstLine: tail.truncated)
+        var fields = tail.truncated
+            ? parseTail(tail.text, dropFirstLine: true)
+            : parse(tail.text, dropFirstLine: false)
 
         // 꼬리에서 제목이나 cwd를 못 찾았고 파일이 잘렸다면 전체를 다시 읽는다.
         if tail.truncated && (fields.aiTitle == nil || fields.cwd == nil) {

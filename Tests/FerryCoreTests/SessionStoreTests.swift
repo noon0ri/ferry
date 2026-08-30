@@ -129,8 +129,14 @@ private final class ScanCounter: @unchecked Sendable {
     let elapsed = Date().timeIntervalSince(start)
 
     let count = store.projects.flatMap(\.sessions).count
-    let budget = max(0.2, 0.2 * Double(count) / 300.0)
 
-    print("세션 \(count)개, 첫 스캔 \(Int(elapsed * 1000))ms (예산 \(Int(budget * 1000))ms)")
-    #expect(elapsed < budget)
+    let perSession = elapsed / Double(count)
+    let budgetPerSession = 0.2 / 300.0   // 스펙 §7: 300개에 200ms
+    let projected = perSession * 300
+
+    print("세션 \(count)개, 첫 스캔 \(Int(elapsed * 1000))ms "
+          + "(세션당 \(String(format: "%.2f", perSession * 1000))ms, "
+          + "300개 환산 \(String(format: "%.2f", projected))s)")
+
+    #expect(perSession < budgetPerSession)
 }
