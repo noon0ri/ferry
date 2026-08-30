@@ -12,3 +12,9 @@
 "delete.detail" = "Frees %@ including subagent logs. You can restore it from the Trash, and `claude --resume` will no longer find it.";
 "delete.confirm" = "Move to Trash";
 "delete.cancel" = "Cancel";
+"action.renameSession" = "Rename…";
+"rename.title" = "Rename this session";
+"rename.detail" = "The name is saved into the session log, so `claude --resume` will show it too.";
+"rename.save" = "Save";
+"rename.cancel" = "Cancel";
+"notice.renameFailed" = "Couldn't rename: %@";

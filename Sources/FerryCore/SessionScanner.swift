@@ -3,6 +3,9 @@ import Foundation
 public struct SessionScanner {
 
     public struct ParsedFields: Equatable, Sendable {
+        /// 사용자가 직접 붙인 이름(`claude -n` 또는 Ferry의 이름 변경).
+        /// 자동 생성된 aiTitle보다 우선한다.
+        public var customTitle: String?
         public var aiTitle: String?
         public var cwd: String?
         public var gitBranch: String?
@@ -31,6 +34,10 @@ public struct SessionScanner {
             if let type = record["type"] as? String, type == "ai-title",
                let title = record["aiTitle"] as? String, !title.isEmpty {
                 fields.aiTitle = title   // 나중 값이 이긴다
+            }
+            if let type = record["type"] as? String, type == "custom-title",
+               let title = record["customTitle"] as? String, !title.isEmpty {
+                fields.customTitle = title
             }
             if let cwd = record["cwd"] as? String, !cwd.isEmpty {
                 fields.cwd = cwd
@@ -81,6 +88,12 @@ public struct SessionScanner {
                 search = search[search.startIndex..<lineStart]   // 이 줄은 버리고 앞쪽에서 재시도
             }
             return nil
+        }
+
+        if let record = lastRecord(containing: "\"custom-title\""),
+           (record["type"] as? String) == "custom-title",
+           let title = record["customTitle"] as? String, !title.isEmpty {
+            fields.customTitle = title
         }
 
         if let record = lastRecord(containing: "\"ai-title\""),
@@ -157,7 +170,9 @@ public struct SessionScanner {
 
         let id = fields.sessionId
             ?? logPath.deletingPathExtension().lastPathComponent
-        let title = fields.aiTitle
+        // 사용자가 붙인 이름이 자동 생성 제목을 이긴다.
+        let title = fields.customTitle
+            ?? fields.aiTitle
             ?? fields.firstUserPrompt
             ?? String(id.prefix(8))
 

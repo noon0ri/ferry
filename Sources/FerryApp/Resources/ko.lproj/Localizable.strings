@@ -12,3 +12,9 @@
 "delete.detail" = "서브에이전트 로그를 포함해 %@를 비웁니다. 휴지통에서 되돌릴 수 있고, `claude --resume`으로는 더 이상 열리지 않습니다.";
 "delete.confirm" = "휴지통으로 이동";
 "delete.cancel" = "취소";
+"action.renameSession" = "이름 변경…";
+"rename.title" = "세션 이름 변경";
+"rename.detail" = "이름은 세션 로그에 저장되어 `claude --resume` 목록에도 함께 나타납니다.";
+"rename.save" = "저장";
+"rename.cancel" = "취소";
+"notice.renameFailed" = "이름을 바꾸지 못했습니다: %@";

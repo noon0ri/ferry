@@ -22,8 +22,12 @@ struct MenuBarView: View {
     @State private var missingPaths: Set<String> = []
     @State private var loadState: LoadState = .loading
     @State private var pendingDelete: Session?
+    @State private var pendingRename: Session?
+    @State private var renameText: String = ""
+    @FocusState private var renameFieldFocused: Bool
 
     private let remover = SessionRemover()
+    private let renamer = SessionRenamer()
 
     private let launcher = TerminalLauncher()
 
@@ -33,6 +37,9 @@ struct MenuBarView: View {
                 emptyState
             } else {
                 list
+            }
+            if let session = pendingRename {
+                renamePanel(session)
             }
             if let session = pendingDelete {
                 deleteConfirmation(session)
@@ -64,7 +71,13 @@ struct MenuBarView: View {
                             SessionRow(session: session,
                                        exists: !missingPaths.contains(session.cwd)) { open(session) }
                                 .contextMenu {
+                                    Button(L("action.renameSession")) {
+                                        pendingDelete = nil
+                                        renameText = session.title
+                                        pendingRename = session
+                                    }
                                     Button(L("action.deleteSession"), role: .destructive) {
+                                        pendingRename = nil
                                         pendingDelete = session
                                     }
                                 }
@@ -106,6 +119,7 @@ struct MenuBarView: View {
         }
         var screenCap = (NSScreen.main?.visibleFrame.height ?? 800) - 140
         if pendingDelete != nil { screenCap -= 160 }   // 확인 영역이 차지하는 만큼
+        if pendingRename != nil { screenCap -= 160 }
         return min(max(needed, 160), min(900, screenCap))
     }
 
@@ -138,6 +152,51 @@ struct MenuBarView: View {
                     .padding(16)
                 }
             }
+        }
+    }
+
+    /// 삭제 확인과 같은 이유로 시스템 모달을 쓰지 않고 팝오버 안에서 입력받는다.
+    private func renamePanel(_ session: Session) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L("rename.title")).fontWeight(.semibold).font(.callout)
+            TextField("", text: $renameText)
+                .textFieldStyle(.roundedBorder)
+                .font(.caption)
+                .focused($renameFieldFocused)
+                .onSubmit { confirmRename(session) }
+            Text(L("rename.detail"))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                Button(L("rename.save")) { confirmRename(session) }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button(L("rename.cancel")) { pendingRename = nil }
+                    .buttonStyle(.bordered)
+                Spacer()
+            }
+            .font(.caption)
+            .padding(.top, 2)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.12))
+        .onAppear { renameFieldFocused = true }
+    }
+
+    private func confirmRename(_ session: Session) {
+        let name = renameText
+        pendingRename = nil
+        do {
+            try renamer.rename(session, to: name)
+        } catch {
+            setNotice(L("notice.renameFailed", error.localizedDescription))
+            return
+        }
+        Task {
+            await store.refreshAsync()
+            updateMissingPaths()
         }
     }
 
