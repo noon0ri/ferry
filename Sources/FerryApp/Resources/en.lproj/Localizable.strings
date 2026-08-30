@@ -18,3 +18,4 @@
 "rename.save" = "Save";
 "rename.cancel" = "Cancel";
 "notice.renameFailed" = "Couldn't rename: %@";
+"action.newSession" = "New Session Here";

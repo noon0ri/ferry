@@ -23,6 +23,7 @@ struct MenuBarView: View {
     @State private var loadState: LoadState = .loading
     @State private var pendingDelete: Session?
     @State private var pendingRename: Session?
+    @State private var hoveredProject: String?
     @State private var renameText: String = ""
     @FocusState private var renameFieldFocused: Bool
 
@@ -87,17 +88,44 @@ struct MenuBarView: View {
                                 }
                         }
                     } label: {
-                        HStack {
-                            Text(project.name).fontWeight(.medium)
-                            Text("(\(project.sessions.count))")
-                                .foregroundStyle(.secondary)
-                            Spacer()   // 행 끝까지 채워 클릭 영역을 넓힌다
+                        HStack(spacing: 4) {
+                            HStack(spacing: 4) {
+                                Text(project.name).fontWeight(.medium)
+                                Text("(\(project.sessions.count))")
+                                    .foregroundStyle(.secondary)
+                                Spacer()   // 이름 오른쪽 빈 공간까지 접기 영역
+                            }
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    binding(for: project).wrappedValue.toggle()
+                                }
+                            }
+                            // 버튼을 Spacer 뒤에 두고 탭 제스처는 앞쪽 HStack에만 건다.
+                            // 라벨 전체에 제스처를 걸면 + 클릭이 접기/펼치기까지 발동시킨다.
+                            //
+                            // 호버할 때 버튼을 끼워 넣으면 그때마다 이름이 밀린다.
+                            // 자리는 항상 차지하게 두고 보이기만 바꾼다.
+                            Button {
+                                newSession(in: project)
+                            } label: {
+                                Image(systemName: "plus")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 4)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .help(L("action.newSession"))
+                            .opacity(hoveredProject == project.id ? 1 : 0)
+                            .allowsHitTesting(hoveredProject == project.id)
                         }
                         .contentShape(Rectangle())   // 빈 공간도 히트 테스트 대상
-                        .onTapGesture {
-                            withAnimation(.easeInOut(duration: 0.15)) {
-                                binding(for: project).wrappedValue.toggle()
-                            }
+                        .onHover { inside in
+                            hoveredProject = inside ? project.id : nil
+                        }
+                        .contextMenu {
+                            Button(L("action.newSession")) { newSession(in: project) }
                         }
                     }
                     .padding(.horizontal, 12)
@@ -322,6 +350,19 @@ struct MenuBarView: View {
         }
     }
 
+    private func newSession(in project: Project) {
+        guard FileManager.default.fileExists(atPath: project.path) else {
+            setNotice(L("notice.folderMissing", project.path))
+            return
+        }
+        switch launcher.launchNew(inDirectory: project.path) {
+        case .launched, .focused:
+            notice = nil
+        case .copiedToClipboard:
+            setNotice(L("notice.launchFailed"))
+        }
+    }
+
     private func open(_ session: Session) {
         // 클릭 시점에 직접 확인한다. 마지막 새로고침 이후 폴더가 사라졌을 수 있고,
         // 클릭 한 번에 stat 한 번은 렌더 경로와 달리 비용이 아니다.
@@ -331,7 +372,7 @@ struct MenuBarView: View {
             return
         }
         switch launcher.launch(session) {
-        case .launched:
+        case .launched, .focused:
             notice = nil
             noticeSetAt = nil
         case .copiedToClipboard:
