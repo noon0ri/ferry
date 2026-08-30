@@ -54,6 +54,13 @@ struct MenuBarView: View {
                             Text(project.name).fontWeight(.medium)
                             Text("(\(project.sessions.count))")
                                 .foregroundStyle(.secondary)
+                            Spacer()   // 행 끝까지 채워 클릭 영역을 넓힌다
+                        }
+                        .contentShape(Rectangle())   // 빈 공간도 히트 테스트 대상
+                        .onTapGesture {
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                binding(for: project).wrappedValue.toggle()
+                            }
                         }
                     }
                     .padding(.horizontal, 12)
@@ -61,7 +68,24 @@ struct MenuBarView: View {
             }
             .padding(.vertical, 8)
         }
-        .frame(maxHeight: 420)
+        .frame(height: listHeight)
+    }
+
+    /// ScrollView는 세로 방향 고유 크기가 없다. maxHeight만 주면 "이만큼까지 허용"일 뿐
+    /// "이만큼 달라"가 아니어서, 콘텐츠에 맞춰 크기가 정해지는 MenuBarExtra 창 안에서는
+    /// 최소 크기로 쪼그라든다(행 텍스트가 세로로 잘리는 증상). 그래서 높이를 계산해 명시한다.
+    ///
+    /// 펼쳐진 그룹만큼 늘어나고, 화면 높이를 넘지 않는다.
+    private var listHeight: CGFloat {
+        var needed: CGFloat = 16                       // LazyVStack 위아래 여백
+        for project in store.projects {
+            needed += 26                               // 그룹 헤더 한 줄
+            if expanded.contains(project.id) {
+                needed += CGFloat(project.sessions.count) * 39   // 세션 행(2줄)
+            }
+        }
+        let screenCap = (NSScreen.main?.visibleFrame.height ?? 800) - 140
+        return min(max(needed, 160), min(900, screenCap))
     }
 
     /// projects.isEmpty는 "첫 스캔이 아직 안 끝남"과 "스캔은 끝났는데 세션이 없음"을
