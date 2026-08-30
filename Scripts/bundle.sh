@@ -30,9 +30,9 @@ done
 # actool은 두 가지를 내놓는다 — macOS 26의 레이어드 렌더링용 Assets.car와,
 # 그 이전 버전이 읽는 고전 icon.icns. 둘 다 넣어야 macOS 14~26을 모두 커버한다.
 ICON_KEYS=""
-if [ -d "icon.icon" ]; then
+if [ -d "icon Exports/icon.icon" ]; then
     ICON_TMP="$(mktemp -d)"
-    xcrun actool icon.icon \
+    xcrun actool "icon Exports/icon.icon" \
         --compile "${ICON_TMP}" \
         --platform macosx \
         --minimum-deployment-target 14.0 \
@@ -46,7 +46,7 @@ if [ -d "icon.icon" ]; then
     ICON_KEYS="    <key>CFBundleIconFile</key>          <string>icon</string>
     <key>CFBundleIconName</key>          <string>icon</string>"
 else
-    echo "경고: icon.icon 이 없어 기본 아이콘으로 빌드합니다."
+    echo "경고: icon Exports/icon.icon 이 없어 기본 아이콘으로 빌드합니다."
 fi
 
 cat > "${APP}/Contents/Info.plist" <<PLIST
@@ -75,6 +75,32 @@ ${ICON_KEYS}
 </dict>
 </plist>
 PLIST
+
+# actool의 icon.icns에는 256px까지만 들어간다. macOS 26은 Assets.car를 쓰므로 문제없지만
+# macOS 14~15는 이 icns를 읽어 큰 아이콘에서 흐려진다.
+# Assets.car에는 1024 렌디션이 있으므로, 조립된 앱에서 그걸 뽑아 완전한 icns로 교체한다.
+if [ -f "${APP}/Contents/Resources/Assets.car" ]; then
+    ICNS_TMP="$(mktemp -d)"
+    if xcrun swift "Scripts/extract-icon.swift" "$APP" "${ICNS_TMP}/icon-1024.png" 1024 2>/dev/null; then
+        SET="${ICNS_TMP}/icon.iconset"
+        mkdir -p "$SET"
+        for spec in "16 16x16" "32 16x16@2x" "32 32x32" "64 32x32@2x" \
+                    "128 128x128" "256 128x128@2x" "256 256x256" "512 256x256@2x" \
+                    "512 512x512" "1024 512x512@2x"; do
+            px="${spec%% *}"; name="${spec##* }"
+            sips -z "$px" "$px" "${ICNS_TMP}/icon-1024.png" \
+                 --out "${SET}/icon_${name}.png" >/dev/null 2>&1
+        done
+        if iconutil --convert icns --output "${APP}/Contents/Resources/icon.icns" "$SET" 2>/dev/null; then
+            echo "아이콘: 16~1024px 전 사이즈 생성"
+        else
+            echo "경고: icns 재생성 실패. actool 기본본을 씁니다."
+        fi
+    else
+        echo "경고: 아이콘 추출 실패. actool 기본본을 씁니다."
+    fi
+    rm -rf "$ICNS_TMP"
+fi
 
 codesign --force --deep --sign - "$APP" 2>/dev/null || \
     echo "경고: 코드 서명 실패. 자동화 권한이 매번 초기화될 수 있습니다."

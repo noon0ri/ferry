@@ -2,3 +2,7 @@
 build/
 .DS_Store
 .superpowers/
+
+# Icon Composer가 내보낸 iOS 렌더. macOS 앱 빌드에는 쓰이지 않는다.
+# 아이콘 소스는 "icon Exports/icon.icon" 이고, 빌드 시 actool이 여기서 컴파일한다.
+icon Exports/*.png
