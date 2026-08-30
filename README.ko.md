@@ -91,44 +91,22 @@ macOS는 자동화 권한을 서명 신원에 묶어두므로 새로 빌드하�
 plutil -extract NSAppleEventsUsageDescription raw build/Ferry.app/Contents/Info.plist
 ```
 
-## 동작 방식
-
-`~/.claude/projects/`의 세션 로그를 읽는다. **쓰는 곳은 두 군데뿐이다** — 이름 변경(로그 끝에
-한 줄 덧붙임)과 삭제(휴지통으로 이동). 그 외에는 어떤 파일도 건드리지 않는다.
-
-세션 로그는 JSON Lines이고, 필요한 것은 네 가지다. 사용자가 붙인 이름(`custom-title`),
-자동 생성 제목(`ai-title`), 작업 폴더(`cwd`), git 브랜치.
-
-두 가지가 성능을 좌우한다.
-
-**로그 파일은 20MB를 넘기도 한다.** 팝오버를 열 때마다 전부 읽을 수는 없으므로 파일 끝
-256KB만 읽는다. 제목 레코드는 세션 진행 중 반복 기록되어 파일 뒤쪽에 있기 때문에 대개
-꼬리에서 찾을 수 있고, 못 찾은 경우에만 전체를 읽는다.
-
-**꼬리를 Swift `String`으로 만들면 안 된다.** 256KB를 문자열로 변환해 `split`하는 것만으로
-전체 스캔 시간의 절반 이상이 소모된다(측정: split 단독 ~94ms/23파일). grapheme cluster 인지
-처리 비용이다. `Data` 바이트 위에서 필요한 줄만 찾아 파싱한다.
-
-그룹핑 키는 로그 안의 `cwd` 값이다. 디렉토리 이름(`-Users-me-Codes-my-project`)은 원래 경로로
-디코딩할 수 없다. 하이픈이 경로 구분자인지 이름에 포함된 하이픈인지 구분할 방법이 없고,
-공백이 든 폴더 이름도 흔하다.
-
-실측(세션 23개 기준): 첫 스캔 92ms, 이후 갱신 1ms. mtime이 바뀐 파일만 다시 읽는다.
-
 ## 개발
 
 ```bash
 swift test      # 63개
 swift build
-swift run FerryApp
+./Scripts/bundle.sh
 ```
 
 - `Sources/FerryCore` — UI 없는 로직. 로그 파싱, 폴더 순회, 명령 생성, 이름 변경, 삭제
 - `Sources/FerryApp` — 메뉴바 UI
 - `Scripts/bundle.sh` — 실행 파일을 `.app` 번들로 포장
 
-설계 근거는 [`docs/superpowers/specs/`](docs/superpowers/specs/), 고치지 않기로 한 것들과 그
-이유는 [`docs/known-issues.md`](docs/known-issues.md)에 있다.
+로그를 어떻게 읽는지, 왜 문자열이 아니라 바이트를 다루는지, 열려 있는 창을 어떻게
+식별하는지 — 그리고 거기 이르기까지 무엇이 어긋났는지는 [handoff.md](handoff.md)에 있다.
+설계 문서는 [`docs/superpowers/specs/`](docs/superpowers/specs/), 고치지 않기로 한 것들은
+[`docs/known-issues.md`](docs/known-issues.md)에 있다.
 
 ## 라이선스
 
