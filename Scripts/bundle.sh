@@ -2,8 +2,8 @@
 set -euo pipefail
 
 APP_NAME="Ferry"
-BUNDLE_ID="dev.seongbin.ferry"
-VERSION="0.1.0"
+BUNDLE_ID="dev.noon0ri.ferry"
+VERSION="0.1.1"
 
 cd "$(dirname "$0")/.."
 

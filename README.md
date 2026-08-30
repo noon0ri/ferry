@@ -1,56 +1,52 @@
 # Ferry
 
-흩어져 있는 Claude Code 세션을 메뉴바 한 곳에 모아 보여주고, 클릭 한 번으로 다시 여는 macOS 앱.
+**English** · [한국어](README.ko.md)
 
-## 왜 만들었나
+A macOS menu bar app that gathers your scattered Claude Code sessions into one list and reopens any of them with a click.
 
-Claude Code 세션은 프로젝트 폴더별로 흩어져 있다. `claude --resume`은 현재 디렉토리 기준으로만
-목록을 보여주고, 그 목록은 UUID와 타임스탬프뿐이라 어떤 대화였는지 알아보기 어렵다.
+## Why
 
-그래서 터미널 창을 닫지 못하게 된다. 주 1회씩만 돌아가는 세션이어도, 닫으면 다시 찾기가
-번거로워 열어둔 채로 쌓인다. Ferry는 그 창들을 닫을 수 있게 하는 것이 목표다.
+Claude Code sessions are scattered across project folders. `claude --resume` only lists sessions in the current directory, and that list shows UUIDs and timestamps — not what the conversation was about.
 
-## 하는 일
+So you stop closing terminal windows. Even a session you return to once a week stays open, because finding it again is a chore. Ferry exists so those windows can be closed.
 
-- `~/.claude/projects/`의 모든 세션을 작업 폴더별로 묶어서 보여준다
-- 세션 제목은 로그에 이미 기록된 것을 읽는다. UUID가 아니라 "3D 아이콘 세트 만들기"처럼 보인다
-- 클릭하면 Terminal에서 해당 폴더로 이동해 `claude --resume`을 실행한다
-- 60초 이내에 활동이 있었던 세션은 초록 점으로 표시된다
-- 우클릭으로 이름 변경과 삭제
+## What it does
 
-이름을 바꾸면 Claude Code가 쓰는 것과 같은 형식으로 저장되므로, `claude --resume` 목록과
-터미널 타이틀에도 그 이름이 나타난다. 이름이 두 군데로 갈라지지 않는다.
+- Shows every session under `~/.claude/projects/`, grouped by working directory
+- Session titles come from what is already recorded in the log, so you see "Build an interactive 3D icon set" rather than a UUID
+- Clicking one opens Terminal in that folder and runs `claude --resume`
+- Sessions active within the last 60 seconds get a green dot; the list refreshes every 3 seconds
+- Right-click to rename or delete
 
-삭제는 세션 로그와 서브에이전트 로그를 함께 휴지통으로 옮긴다. 서브에이전트 로그가 로그
-본체보다 10~30배 큰 경우가 흔해서, 확인 창에 둘을 합친 용량을 보여준다.
+Renaming writes the same record format Claude Code itself uses, so the new name also appears in the `claude --resume` picker and the terminal title. The name does not live in two places.
 
-## 요구 사항
+Deleting moves both the session log and its subagent logs to the Trash. Subagent logs are commonly 10–30× larger than the log itself, so the confirmation shows the combined size.
 
-macOS 14 이상. Intel과 Apple Silicon 모두 지원한다(유니버설 빌드).
+## Requirements
 
-## 설치
+macOS 14 or later. Universal binary — runs on both Intel and Apple Silicon.
 
-### 다운로드 (Xcode 불필요)
+## Install
 
-[Releases](https://github.com/noon0ri/ferry/releases)에서 `Ferry.zip`을 받는다.
-Intel과 Apple Silicon 모두에서 돌아가고, 시스템 프레임워크만 쓰므로 별도 의존성이 없다.
+### Download (no Xcode needed)
+
+Grab `Ferry.zip` from [Releases](https://github.com/noon0ri/ferry/releases). It uses only system frameworks, so there is nothing else to install.
 
 ```bash
 cd ~/Downloads && unzip Ferry.zip
 mv Ferry.app /Applications/
 
-# 인터넷에서 받은 앱은 Gatekeeper가 막는다. 아래 한 줄로 푼다.
+# Gatekeeper blocks apps downloaded from the internet. This clears it.
 xattr -d com.apple.quarantine /Applications/Ferry.app
 
 open /Applications/Ferry.app
 ```
 
-터미널이 꺼려지면 Finder에서 앱을 우클릭 → 열기 → 다시 한 번 열기로도 된다.
+If you would rather not use Terminal: right-click the app in Finder → Open → Open again.
 
-Gatekeeper가 막는 이유는 애드혹 서명이라 개발자를 확인할 수 없어서다. 유료 개발자 계정으로
-공증(notarize)하면 이 단계가 사라지지만, 개인 도구라 하지 않았다.
+Gatekeeper blocks it because the app is ad-hoc signed, so the developer cannot be verified. Notarizing with a paid developer account would remove this step; it is a personal tool, so it is not notarized.
 
-### 소스에서 빌드
+### Build from source
 
 ```bash
 git clone https://github.com/noon0ri/ferry.git
@@ -59,68 +55,54 @@ cd ferry
 cp -R build/Ferry.app /Applications/
 ```
 
-Xcode 26 이상이 필요하다(Swift 6.3). 빌드한 앱은 격리 속성이 붙지 않으므로 위의
-`xattr` 단계가 필요 없다. 업데이트는 `git pull && ./Scripts/bundle.sh`.
+Requires Xcode 26 or later (Swift 6.3). A locally built app carries no quarantine attribute, so the `xattr` step above is unnecessary. To update: `git pull && ./Scripts/bundle.sh`.
 
-### 로그인 시 자동 실행
+### Launch at login
 
-시스템 설정 → 일반 → 로그인 항목 에서 Ferry를 추가한다.
+System Settings → General → Login Items → add Ferry.
 
-## 처음 실행할 때
+## First run
 
-세션을 처음 클릭하면 Terminal 제어 권한을 묻는다. 허용해야 재개가 동작한다. 거부하면 재개
-명령이 클립보드에 복사되므로 터미널에 직접 붙여넣으면 된다. 권한은 시스템 설정 → 개인정보
-보호 및 보안 → 자동화에서 바꿀 수 있다.
+The first time you click a session, macOS asks for permission to control Terminal. Resuming needs it. If you deny, the resume command is copied to your clipboard instead, so you can paste it into a terminal yourself. Change it later under System Settings → Privacy & Security → Automation.
 
-빌드할 때마다 권한을 다시 묻는다면 정상이다. `bundle.sh`는 애드혹 서명(`--sign -`)을 쓰는데,
-macOS는 자동화 권한을 서명 신원에 묶어두므로 새로 빌드하면 신원이 바뀌어 권한이 초기화된다.
+If it asks again after every build, that is expected. `bundle.sh` signs ad-hoc (`--sign -`), and macOS ties Automation permission to the signing identity — a rebuild mints a new identity, which resets the grant.
 
-권한 대화상자가 아예 뜨지 않고 매번 클립보드로만 복사된다면 번들의 Info.plist에서
-`NSAppleEventsUsageDescription`이 빠진 것이다. 다음으로 확인한다.
+If the permission dialog never appears and every click just copies to the clipboard, `NSAppleEventsUsageDescription` is missing from the bundle's Info.plist. Check with:
 
 ```bash
 plutil -extract NSAppleEventsUsageDescription raw build/Ferry.app/Contents/Info.plist
 ```
 
-## 동작 방식
+## How it works
 
-`~/.claude/projects/`의 세션 로그를 읽는다. **쓰는 곳은 두 군데뿐이다** — 이름 변경(로그 끝에
-한 줄 덧붙임)과 삭제(휴지통으로 이동). 그 외에는 어떤 파일도 건드리지 않는다.
+Ferry reads the session logs under `~/.claude/projects/`. **It writes in exactly two places** — renaming (appends one line to the log) and deleting (moves to the Trash). Nothing else is touched.
 
-세션 로그는 JSON Lines이고, 필요한 것은 네 가지다. 사용자가 붙인 이름(`custom-title`),
-자동 생성 제목(`ai-title`), 작업 폴더(`cwd`), git 브랜치.
+Session logs are JSON Lines. Ferry needs four things from them: the user-set name (`custom-title`), the auto-generated title (`ai-title`), the working directory (`cwd`), and the git branch.
 
-두 가지가 성능을 좌우한다.
+Two facts drive the performance work.
 
-**로그 파일은 20MB를 넘기도 한다.** 팝오버를 열 때마다 전부 읽을 수는 없으므로 파일 끝
-256KB만 읽는다. 제목 레코드는 세션 진행 중 반복 기록되어 파일 뒤쪽에 있기 때문에 대개
-꼬리에서 찾을 수 있고, 못 찾은 경우에만 전체를 읽는다.
+**Log files exceed 20 MB.** Reading them whole on every popover open is not viable, so Ferry reads only the last 256 KB. Title records are rewritten repeatedly during a session and therefore sit near the end of the file; only when the tail does not yield one does Ferry fall back to reading the whole file.
 
-**꼬리를 Swift `String`으로 만들면 안 된다.** 256KB를 문자열로 변환해 `split`하는 것만으로
-전체 스캔 시간의 절반 이상이 소모된다(측정: split 단독 ~94ms/23파일). grapheme cluster 인지
-처리 비용이다. `Data` 바이트 위에서 필요한 줄만 찾아 파싱한다.
+**Do not turn that tail into a Swift `String`.** Converting 256 KB to a string and calling `split` accounts for more than half of total scan time (measured: split alone ~94 ms across 23 files) — the cost of grapheme-cluster-aware processing. Ferry works over `Data` bytes and parses only the lines it needs.
 
-그룹핑 키는 로그 안의 `cwd` 값이다. 디렉토리 이름(`-Users-me-Codes-my-project`)은 원래 경로로
-디코딩할 수 없다. 하이픈이 경로 구분자인지 이름에 포함된 하이픈인지 구분할 방법이 없고,
-공백이 든 폴더 이름도 흔하다.
+The grouping key is the `cwd` value from inside the log. Directory names (`-Users-me-Codes-my-project`) cannot be decoded back into paths: there is no way to tell whether a hyphen is a path separator or part of a folder name, and folder names with spaces are common.
 
-실측(세션 23개 기준): 첫 스캔 92ms, 이후 갱신 1ms. mtime이 바뀐 파일만 다시 읽는다.
+Measured with 23 sessions: 92 ms for the first scan, 1 ms after that. Only files whose mtime changed are re-read.
 
-## 개발
+## Development
 
 ```bash
-swift test      # 49개
+swift test      # 49 tests
 swift build
 swift run FerryApp
 ```
 
-- `Sources/FerryCore` — UI 없는 로직. 로그 파싱, 폴더 순회, 명령 생성, 이름 변경, 삭제
-- `Sources/FerryApp` — 메뉴바 UI
-- `Scripts/bundle.sh` — 실행 파일을 `.app` 번들로 포장
+- `Sources/FerryCore` — logic with no UI: log parsing, directory traversal, command construction, rename, delete
+- `Sources/FerryApp` — the menu bar UI
+- `Scripts/bundle.sh` — wraps the executable into a `.app`
 
-설계 근거는 [`docs/superpowers/specs/`](docs/superpowers/specs/), 고치지 않기로 한 것들과 그
-이유는 [`docs/known-issues.md`](docs/known-issues.md)에 있다.
+Design rationale lives in [`docs/superpowers/specs/`](docs/superpowers/specs/). Things deliberately left unfixed, and why, are in [`docs/known-issues.md`](docs/known-issues.md).
 
-## 라이선스
+## License
 
 [MIT](LICENSE)
