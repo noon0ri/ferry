@@ -44,7 +44,7 @@ huddling-lab2     "웹 기반 인터랙티브 3D 아이콘 세트 만들기"
 - 프로젝트(작업 폴더) 단위 그룹, 접기/펼치기
 - 세션별 제목 · 마지막 활동 시각 표시
 - 최근 60초 내 활동 시 활동 표시(●)
-- 클릭 시 Terminal.app 새 탭에서 재개
+- 클릭 시 Terminal.app 새 창에서 재개
 
 ### 2차 (실사용 후 판단)
 
@@ -63,7 +63,7 @@ huddling-lab2     "웹 기반 인터랙티브 3D 아이콘 세트 만들기"
   → 팝오버 열림, 프로젝트 목록 (최근 활동순)
   → 프로젝트 펼침
   → 세션 클릭
-  → Terminal.app 새 탭: cd '<cwd>' && claude --resume <id>
+  → Terminal.app 새 창: cd '<cwd>' && claude --resume <id>
   → 작업 종료 후 ⌘W (목록은 메뉴바에 남음)
 ```
 
@@ -82,7 +82,7 @@ huddling-lab2     "웹 기반 인터랙티브 3D 아이콘 세트 만들기"
 
 ### 접근 방식
 
-SwiftUI `MenuBarExtra` + 온디맨드 스캔. **macOS 14+**, Swift 6.
+SwiftUI `MenuBarExtra` + 3초 주기 폴링 스캔. **macOS 14+**, Swift 6.
 
 `MenuBarExtra` 자체는 macOS 13+지만 `SessionStore`가 쓰는 Observation 프레임워크(`@Observable`)가 macOS 14+를 요구하므로 하한을 14로 잡는다.
 
@@ -125,15 +125,23 @@ struct Project: Identifiable {
 ### 데이터 흐름
 
 ```
-팝오버 열림
-  → .task → store.refresh()
-  → ~/.claude/projects/*/ 순회
-  → depth 1의 *.jsonl만 수집 (subagents/ 하위 제외)
-  → mtime을 캐시와 비교, 변경분만 TaskGroup으로 병렬 재파싱
-  → cwd 기준 그룹핑
-  → 정렬 (§4 표시 규칙)
-  → 렌더
+뷰 최초 표시
+  → .task 시작 → 3초 주기 루프
+      → store.refreshAsync()
+      → ~/.claude/projects/*/ 순회
+      → depth 1의 *.jsonl만 수집 (subagents/ 하위 제외)
+      → mtime을 캐시와 비교, 변경분만 재파싱
+      → cwd 기준 그룹핑
+      → 정렬 (§4 표시 규칙)
+      → 렌더
+      → 3초 대기 후 반복
 ```
+
+한 번 스캔하고 멈추지 않는 이유: `MenuBarExtra(.window)`는 팝오버를 닫아도 뷰를
+버리지 않는다. 그래서 "열릴 때 한 번만 스캔"으로는 안 된다 — 팝오버를 다시 열어도
+`.task`가 재실행되지 않으므로 목록이 그 시점에 그대로 굳는다. 대신 뷰가 살아있는 동안
+3초마다 다시 스캔한다. 웜 스캔(변경 없는 파일은 mtime 캐시로 건너뛴다)은 ~1ms 수준이라
+계속 도는 비용이 사실상 없다.
 
 ### 데이터 소스
 
@@ -186,7 +194,9 @@ struct Project: Identifiable {
 | 꼬리 256KB 읽기 | 17 ms |
 | 23개 전체 스캔 (셸) | 356 ms |
 
-셸 기준 356ms이며 Swift 네이티브 + 병렬 처리로 더 내려간다. 팝오버 열림 시점 스캔으로 충분하므로 백그라운드 인덱싱이 필요 없다.
+셸 기준 356ms이며 Swift 네이티브로는 더 내려간다. FSEvents 같은 별도의 백그라운드
+인덱싱 데몬은 필요 없다 — 뷰가 살아있는 동안 3초 주기로 웜 스캔(mtime 캐시로 변경분만
+재파싱, ~1ms)을 도는 것만으로 충분하기 때문이다.
 
 **예산은 콜드와 웜을 나눈다.** mtime 캐시 때문에 전체 스캔은 앱 실행당 한 번뿐이고,
 그 뒤의 모든 팝오버 열기는 변경된 파일만 다시 읽는다. 사용자가 반복해서 체감하는 것은 웜이다.

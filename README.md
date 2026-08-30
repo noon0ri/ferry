@@ -34,11 +34,11 @@ macOS는 자동화 권한을 서명 신원에 묶어두므로 새로 빌드하�
 
 각 로그에서 `ai-title`(Claude Code가 자동 생성하는 세션 제목), `cwd`, `gitBranch`를
 꺼내 작업 폴더별로 묶는다. 클릭하면 `cd <폴더> && claude --resume <세션id>`를
-Terminal.app 새 탭에 넘긴다.
+Terminal.app 새 창에 넘긴다.
 
 ## 개발
 
-    swift test     # 36개 테스트
+    swift test     # 37개 테스트
     swift build
     swift run FerryApp
 
