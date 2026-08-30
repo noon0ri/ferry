@@ -40,11 +40,11 @@ struct MenuBarView: View {
             }
             if let session = pendingRename {
                 renamePanel(session)
-            }
-            if let session = pendingDelete {
+            } else if let session = pendingDelete {
                 deleteConfirmation(session)
+            } else {
+                footer
             }
-            footer
         }
         .frame(width: 320)
         .task {
@@ -72,13 +72,17 @@ struct MenuBarView: View {
                                        exists: !missingPaths.contains(session.cwd)) { open(session) }
                                 .contextMenu {
                                     Button(L("action.renameSession")) {
-                                        pendingDelete = nil
                                         renameText = session.title
-                                        pendingRename = session
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 1)) {
+                                            pendingDelete = nil
+                                            pendingRename = session
+                                        }
                                     }
                                     Button(L("action.deleteSession"), role: .destructive) {
-                                        pendingRename = nil
-                                        pendingDelete = session
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 1)) {
+                                            pendingRename = nil
+                                            pendingDelete = session
+                                        }
                                     }
                                 }
                         }
@@ -157,37 +161,62 @@ struct MenuBarView: View {
 
     /// 삭제 확인과 같은 이유로 시스템 모달을 쓰지 않고 팝오버 안에서 입력받는다.
     private func renamePanel(_ session: Session) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(L("rename.title")).fontWeight(.semibold).font(.callout)
-            TextField("", text: $renameText)
-                .textFieldStyle(.roundedBorder)
-                .font(.caption)
-                .focused($renameFieldFocused)
-                .onSubmit { confirmRename(session) }
-            Text(L("rename.detail"))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 8) {
-                Button(L("rename.save")) { confirmRename(session) }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                Button(L("rename.cancel")) { pendingRename = nil }
-                    .buttonStyle(.bordered)
-                Spacer()
+        actionPanel {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L("rename.title"))
+                    .font(.headline)
+                TextField("", text: $renameText)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($renameFieldFocused)
+                    .onSubmit { confirmRename(session) }
+                Text(L("rename.detail"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .font(.caption)
-            .padding(.top, 2)
+        } actions: {
+            Button(L("rename.cancel")) { dismissPanels() }
+                .keyboardShortcut(.cancelAction)
+            Button(L("rename.save")) { confirmRename(session) }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(0.12))
         .onAppear { renameFieldFocused = true }
+    }
+
+    /// 삭제 확인과 이름 변경이 공유하는 껍데기.
+    ///
+    /// 팝오버 자체가 이미 반투명 재료라 그 위에 또 반투명 배경을 얹으면 대비가 무너진다.
+    /// 불투명한 컨트롤 배경으로 영역을 분리하고, 경계는 구분선 하나로 처리한다.
+    private func actionPanel<Content: View, Actions: View>(
+        @ViewBuilder content: () -> Content,
+        @ViewBuilder actions: () -> Actions
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            content()
+            HStack(spacing: 10) {
+                Spacer()
+                actions()
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .overlay(alignment: .top) { Divider() }
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private func dismissPanels() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 1)) {
+            pendingDelete = nil
+            pendingRename = nil
+        }
     }
 
     private func confirmRename(_ session: Session) {
         let name = renameText
-        pendingRename = nil
+        dismissPanels()
         do {
             try renamer.rename(session, to: name)
         } catch {
@@ -204,34 +233,26 @@ struct MenuBarView: View {
     /// (confirmationDialog/alert)을 띄우면 버튼을 누르는 순간 패널이 키 상태를 잃고
     /// 사라지면서 액션이 실행되지 않는다. 그래서 확인을 팝오버 안에서 처리한다.
     private func deleteConfirmation(_ session: Session) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(L("delete.title")).fontWeight(.semibold).font(.callout)
-            Text(session.title)
-                .font(.caption)
-                .lineLimit(2)
-            Text(session.cwd)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Text(L("delete.detail", formattedSize(session)))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 8) {
-                Button(L("delete.confirm")) { confirmDelete(session) }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.red)
-                Button(L("delete.cancel")) { pendingDelete = nil }
-                    .buttonStyle(.bordered)
-                Spacer()
+        actionPanel {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L("delete.title"))
+                    .font(.headline)
+                Text(session.title)
+                    .font(.subheadline)
+                    .lineLimit(2)
+                Text(L("delete.detail", formattedSize(session)))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .font(.caption)
-            .padding(.top, 2)
+        } actions: {
+            // macOS 관례: 버튼은 오른쪽 아래, 기본 동작이 가장 오른쪽, 취소는 그 왼쪽.
+            Button(L("delete.cancel")) { dismissPanels() }
+                .keyboardShortcut(.cancelAction)
+            Button(L("delete.confirm"), role: .destructive) { confirmDelete(session) }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(0.12))
     }
 
     private var footer: some View {
@@ -288,7 +309,7 @@ struct MenuBarView: View {
     }
 
     private func confirmDelete(_ session: Session) {
-        pendingDelete = nil
+        dismissPanels()
         do {
             try remover.remove(session)
         } catch {
