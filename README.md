@@ -30,34 +30,41 @@ macOS 14 이상. Intel과 Apple Silicon 모두 지원한다(유니버설 빌드)
 
 ## 설치
 
+### 다운로드 (Xcode 불필요)
+
+[Releases](https://github.com/noon0ri/ferry/releases)에서 `Ferry.zip`을 받는다.
+Intel과 Apple Silicon 모두에서 돌아가고, 시스템 프레임워크만 쓰므로 별도 의존성이 없다.
+
+```bash
+cd ~/Downloads && unzip Ferry.zip
+mv Ferry.app /Applications/
+
+# 인터넷에서 받은 앱은 Gatekeeper가 막는다. 아래 한 줄로 푼다.
+xattr -d com.apple.quarantine /Applications/Ferry.app
+
+open /Applications/Ferry.app
+```
+
+터미널이 꺼려지면 Finder에서 앱을 우클릭 → 열기 → 다시 한 번 열기로도 된다.
+
+Gatekeeper가 막는 이유는 애드혹 서명이라 개발자를 확인할 수 없어서다. 유료 개발자 계정으로
+공증(notarize)하면 이 단계가 사라지지만, 개인 도구라 하지 않았다.
+
+### 소스에서 빌드
+
 ```bash
 git clone https://github.com/noon0ri/ferry.git
 cd ferry
 ./Scripts/bundle.sh
-open build/Ferry.app
+cp -R build/Ferry.app /Applications/
 ```
 
-계속 쓰려면 `build/Ferry.app`을 `/Applications`으로 옮긴다.
+Xcode 26 이상이 필요하다(Swift 6.3). 빌드한 앱은 격리 속성이 붙지 않으므로 위의
+`xattr` 단계가 필요 없다. 업데이트는 `git pull && ./Scripts/bundle.sh`.
 
-### 빌드 환경이 없는 Mac에 설치하기
+### 로그인 시 자동 실행
 
-Xcode가 없는 기기라면 빌드된 앱을 그대로 복사해도 된다. 시스템 프레임워크만 쓰므로
-별도 의존성이 없다.
-
-```bash
-# 빌드가 되는 기기에서
-ditto -c -k --keepParent build/Ferry.app Ferry.zip
-```
-
-받는 기기에서 압축을 풀면 Gatekeeper가 막는다. 애드혹 서명이라 개발자를 확인할 수 없기
-때문이다. 다음 중 하나로 푼다.
-
-```bash
-xattr -d com.apple.quarantine /Applications/Ferry.app
-```
-
-또는 Finder에서 앱을 우클릭 → 열기 → 다시 한 번 열기. 자동화 권한은 기기마다 따로
-받으므로 새 기기에서 처음 세션을 클릭할 때 다시 묻는다.
+시스템 설정 → 일반 → 로그인 항목 에서 Ferry를 추가한다.
 
 ## 처음 실행할 때
 
