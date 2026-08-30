@@ -26,7 +26,7 @@ Claude Code 세션은 프로젝트 폴더별로 흩어져 있다. `claude --resu
 
 ## 요구 사항
 
-macOS 14 이상.
+macOS 14 이상. Intel과 Apple Silicon 모두 지원한다(유니버설 빌드).
 
 ## 설치
 
@@ -38,6 +38,26 @@ open build/Ferry.app
 ```
 
 계속 쓰려면 `build/Ferry.app`을 `/Applications`으로 옮긴다.
+
+### 빌드 환경이 없는 Mac에 설치하기
+
+Xcode가 없는 기기라면 빌드된 앱을 그대로 복사해도 된다. 시스템 프레임워크만 쓰므로
+별도 의존성이 없다.
+
+```bash
+# 빌드가 되는 기기에서
+ditto -c -k --keepParent build/Ferry.app Ferry.zip
+```
+
+받는 기기에서 압축을 풀면 Gatekeeper가 막는다. 애드혹 서명이라 개발자를 확인할 수 없기
+때문이다. 다음 중 하나로 푼다.
+
+```bash
+xattr -d com.apple.quarantine /Applications/Ferry.app
+```
+
+또는 Finder에서 앱을 우클릭 → 열기 → 다시 한 번 열기. 자동화 권한은 기기마다 따로
+받으므로 새 기기에서 처음 세션을 클릭할 때 다시 묻는다.
 
 ## 처음 실행할 때
 

@@ -6,17 +6,22 @@ BUNDLE_ID="dev.seongbin.ferry"
 VERSION="0.1.0"
 
 cd "$(dirname "$0")/.."
-swift build -c release
+
+# Intel과 Apple Silicon 모두에서 돌도록 유니버설로 빌드한다.
+# 다른 Mac에 그냥 복사해서 쓰는 것이 이 앱의 주된 배포 방식이라, 아키텍처를 가리면
+# 받는 쪽에서 "손상되었다"는 모호한 오류만 보게 된다.
+swift build -c release --arch arm64 --arch x86_64
+BUILD_DIR=".build/apple/Products/Release"
 
 APP="build/${APP_NAME}.app"
 rm -rf "$APP"
 mkdir -p "${APP}/Contents/MacOS" "${APP}/Contents/Resources"
 
-cp ".build/release/FerryApp" "${APP}/Contents/MacOS/${APP_NAME}"
+cp "${BUILD_DIR}/FerryApp" "${APP}/Contents/MacOS/${APP_NAME}"
 
 # SwiftPM이 만든 리소스 번들(로컬라이즈 문자열)을 함께 넣는다.
 # 이게 빠지면 Bundle.module이 문자열을 찾지 못해 UI에 키가 그대로 노출된다.
-for res in .build/release/*.bundle; do
+for res in "${BUILD_DIR}"/*.bundle; do
     [ -e "$res" ] || continue
     cp -R "$res" "${APP}/Contents/Resources/"
 done
