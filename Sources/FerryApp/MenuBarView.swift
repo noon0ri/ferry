@@ -3,11 +3,15 @@ import AppKit
 import FerryCore
 
 struct MenuBarView: View {
+    private enum LoadState { case loading, loaded }
+
     @State private var store = SessionStore()
     @State private var expanded: Set<String> = []
     @State private var didSetInitialExpansion = false
     @State private var notice: String?
+    @State private var noticeSetAt: Date?
     @State private var missingPaths: Set<String> = []
+    @State private var loadState: LoadState = .loading
 
     private let launcher = TerminalLauncher()
 
@@ -29,6 +33,8 @@ struct MenuBarView: View {
                 await store.refreshAsync()
                 updateMissingPaths()
                 applyInitialExpansion()
+                loadState = .loaded
+                clearStaleNotice()
                 try? await Task.sleep(for: .seconds(3))
             }
         }
@@ -58,14 +64,36 @@ struct MenuBarView: View {
         .frame(maxHeight: 420)
     }
 
+    /// projects.isEmpty는 "첫 스캔이 아직 안 끝남"과 "스캔은 끝났는데 세션이 없음"을
+    /// 구분하지 못한다. loadState로 그 둘을 가른다.
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("세션이 없습니다").fontWeight(.medium)
-            Text("~/.claude/projects 를 찾지 못했습니다.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        Group {
+            switch loadState {
+            case .loading:
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("불러오는 중…").fontWeight(.medium)
+                }
+                .padding(16)
+            case .loaded:
+                if FileManager.default.fileExists(atPath: SessionStore.defaultRoot.path) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("세션이 없습니다").fontWeight(.medium)
+                        Text("Claude Code 세션을 찾지 못했습니다.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(16)
+                } else {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("세션이 없습니다").fontWeight(.medium)
+                        Text("~/.claude/projects 를 찾지 못했습니다.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(16)
+                }
+            }
         }
-        .padding(16)
     }
 
     private var footer: some View {
@@ -120,15 +148,28 @@ struct MenuBarView: View {
         // 클릭 한 번에 stat 한 번은 렌더 경로와 달리 비용이 아니다.
         // missingPaths는 렌더링(흐리게 표시) 전용으로만 쓴다.
         guard FileManager.default.fileExists(atPath: session.cwd) else {
-            notice = "폴더가 없습니다: \(session.cwd)"
+            setNotice("폴더가 없습니다: \(session.cwd)")
             return
         }
         switch launcher.launch(session) {
         case .launched:
             notice = nil
+            noticeSetAt = nil
         case .copiedToClipboard:
-            notice = "Terminal 제어 권한이 없어 명령을 복사했습니다"
+            setNotice("Terminal을 열지 못해 명령을 클립보드에 복사했습니다 (자동화 권한을 확인해 보세요)")
         }
+    }
+
+    private func setNotice(_ text: String) {
+        notice = text
+        noticeSetAt = Date()
+    }
+
+    /// notice는 방치하면 영원히 떠 있는다. 10초 지나면 폴링 루프에서 지운다.
+    private func clearStaleNotice() {
+        guard let noticeSetAt, Date().timeIntervalSince(noticeSetAt) > 10 else { return }
+        notice = nil
+        self.noticeSetAt = nil
     }
 }
 
@@ -170,9 +211,13 @@ private struct SessionRow: View {
         .help(session.cwd)
     }
 
-    private var relativeTime: String {
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
-        return formatter.localizedString(for: session.modifiedAt, relativeTo: Date())
+        return formatter
+    }()
+
+    private var relativeTime: String {
+        Self.relativeFormatter.localizedString(for: session.modifiedAt, relativeTo: Date())
     }
 }
