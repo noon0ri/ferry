@@ -2,6 +2,15 @@ import SwiftUI
 import AppKit
 import FerryCore
 
+/// 패키지 타깃의 문자열은 Bundle.main이 아니라 모듈 번들에 있다.
+/// 시스템 로케일에 따라 en/ko가 선택된다.
+private func L(_ key: String) -> String {
+    String(localized: String.LocalizationValue(key), bundle: .module)
+}
+private func L(_ key: String, _ args: CVarArg...) -> String {
+    String(format: L(key), arguments: args)
+}
+
 struct MenuBarView: View {
     private enum LoadState { case loading, loaded }
 
@@ -12,6 +21,9 @@ struct MenuBarView: View {
     @State private var noticeSetAt: Date?
     @State private var missingPaths: Set<String> = []
     @State private var loadState: LoadState = .loading
+    @State private var pendingDelete: Session?
+
+    private let remover = SessionRemover()
 
     private let launcher = TerminalLauncher()
 
@@ -25,6 +37,17 @@ struct MenuBarView: View {
             footer
         }
         .frame(width: 320)
+        .confirmationDialog(
+            L("delete.title"),
+            isPresented: Binding(get: { pendingDelete != nil },
+                                 set: { if !$0 { pendingDelete = nil } }),
+            presenting: pendingDelete
+        ) { session in
+            Button(L("delete.confirm"), role: .destructive) { confirmDelete(session) }
+            Button(L("delete.cancel"), role: .cancel) { pendingDelete = nil }
+        } message: { session in
+            Text(L("delete.message", session.title, session.cwd, formattedSize(session)))
+        }
         .task {
             // .task는 뷰 생명주기당 한 번만 돈다. MenuBarExtra(.window)는 팝오버를
             // 닫아도 뷰를 버리지 않으므로, 한 번만 스캔하면 목록이 그대로 굳는다.
@@ -48,6 +71,11 @@ struct MenuBarView: View {
                         ForEach(project.sessions) { session in
                             SessionRow(session: session,
                                        exists: !missingPaths.contains(session.cwd)) { open(session) }
+                                .contextMenu {
+                                    Button(L("action.deleteSession"), role: .destructive) {
+                                        pendingDelete = session
+                                    }
+                                }
                         }
                     } label: {
                         HStack {
@@ -95,22 +123,22 @@ struct MenuBarView: View {
             switch loadState {
             case .loading:
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("불러오는 중…").fontWeight(.medium)
+                    Text(L("state.loading")).fontWeight(.medium)
                 }
                 .padding(16)
             case .loaded:
                 if FileManager.default.fileExists(atPath: SessionStore.defaultRoot.path) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("세션이 없습니다").fontWeight(.medium)
-                        Text("Claude Code 세션을 찾지 못했습니다.")
+                        Text(L("state.noSessions")).fontWeight(.medium)
+                        Text(L("state.noSessionsDetail"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     .padding(16)
                 } else {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("세션이 없습니다").fontWeight(.medium)
-                        Text("~/.claude/projects 를 찾지 못했습니다.")
+                        Text(L("state.noSessions")).fontWeight(.medium)
+                        Text(L("state.rootMissing"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -129,14 +157,14 @@ struct MenuBarView: View {
             }
             Divider()
             HStack {
-                Button("새로고침") {
+                Button(L("action.refresh")) {
                     Task {
                         await store.refreshAsync()
                         updateMissingPaths()
                     }
                 }
                 Spacer()
-                Button("종료") { NSApplication.shared.terminate(nil) }
+                Button(L("action.quit")) { NSApplication.shared.terminate(nil) }
             }
             .buttonStyle(.plain)
             .font(.caption)
@@ -167,12 +195,32 @@ struct MenuBarView: View {
         missingPaths = Set(paths.filter { !FileManager.default.fileExists(atPath: $0) })
     }
 
+    /// 확인 대화상자에 보여줄 용량. 서브에이전트 로그가 대부분을 차지하므로 합산해서 보여준다.
+    private func formattedSize(_ session: Session) -> String {
+        ByteCountFormatter.string(fromByteCount: SessionRemover.totalSize(of: session),
+                                  countStyle: .file)
+    }
+
+    private func confirmDelete(_ session: Session) {
+        pendingDelete = nil
+        do {
+            try remover.remove(session)
+        } catch {
+            setNotice(L("notice.deleteFailed", error.localizedDescription))
+            return
+        }
+        Task {
+            await store.refreshAsync()
+            updateMissingPaths()
+        }
+    }
+
     private func open(_ session: Session) {
         // 클릭 시점에 직접 확인한다. 마지막 새로고침 이후 폴더가 사라졌을 수 있고,
         // 클릭 한 번에 stat 한 번은 렌더 경로와 달리 비용이 아니다.
         // missingPaths는 렌더링(흐리게 표시) 전용으로만 쓴다.
         guard FileManager.default.fileExists(atPath: session.cwd) else {
-            setNotice("폴더가 없습니다: \(session.cwd)")
+            setNotice(L("notice.folderMissing", session.cwd))
             return
         }
         switch launcher.launch(session) {
@@ -180,7 +228,7 @@ struct MenuBarView: View {
             notice = nil
             noticeSetAt = nil
         case .copiedToClipboard:
-            setNotice("Terminal을 열지 못해 명령을 클립보드에 복사했습니다 (자동화 권한을 확인해 보세요)")
+            setNotice(L("notice.launchFailed"))
         }
     }
 

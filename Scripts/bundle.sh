@@ -14,6 +14,13 @@ mkdir -p "${APP}/Contents/MacOS" "${APP}/Contents/Resources"
 
 cp ".build/release/FerryApp" "${APP}/Contents/MacOS/${APP_NAME}"
 
+# SwiftPM이 만든 리소스 번들(로컬라이즈 문자열)을 함께 넣는다.
+# 이게 빠지면 Bundle.module이 문자열을 찾지 못해 UI에 키가 그대로 노출된다.
+for res in .build/release/*.bundle; do
+    [ -e "$res" ] || continue
+    cp -R "$res" "${APP}/Contents/Resources/"
+done
+
 cat > "${APP}/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -28,6 +35,12 @@ cat > "${APP}/Contents/Info.plist" <<PLIST
     <key>CFBundleVersion</key>           <string>${VERSION}</string>
     <key>LSMinimumSystemVersion</key>    <string>14.0</string>
     <key>LSUIElement</key>               <true/>
+    <key>CFBundleDevelopmentRegion</key>  <string>en</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>en</string>
+        <string>ko</string>
+    </array>
     <key>NSAppleEventsUsageDescription</key>
     <string>세션을 재개할 때 Terminal.app에 명령을 전달하기 위해 필요합니다.</string>
 </dict>

@@ -1,0 +1,14 @@
+"state.loading" = "Loading…";
+"state.noSessions" = "No sessions";
+"state.noSessionsDetail" = "No Claude Code sessions were found.";
+"state.rootMissing" = "Couldn't find ~/.claude/projects.";
+"action.refresh" = "Refresh";
+"action.quit" = "Quit";
+"action.deleteSession" = "Delete Session";
+"notice.folderMissing" = "Folder is gone: %@";
+"notice.launchFailed" = "Couldn't open Terminal, so the command was copied to the clipboard (check Automation permission)";
+"notice.deleteFailed" = "Couldn't delete: %@";
+"delete.title" = "Move this session to the Trash?";
+"delete.message" = "%1$@\n%2$@\nFrees %3$@ including subagent logs. You can restore it from the Trash, and `claude --resume` will no longer find it.";
+"delete.confirm" = "Move to Trash";
+"delete.cancel" = "Cancel";
