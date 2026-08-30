@@ -48,50 +48,54 @@ public struct SessionScanner {
         return fields
     }
 
-    /// 꼬리에서 필요한 줄만 문자열 검색으로 찾아 그 줄만 JSON 파싱한다.
-    /// 우리가 꼬리에서 필요한 값은 네 개뿐이고, 그 값들은 두 종류의 줄에만 있다.
-    /// 수백 줄을 파싱하는 대신 두 줄만 파싱한다.
-    ///
-    /// aiTitle·cwd·gitBranch·sessionId는 모두 "마지막 값이 이긴다"이므로
-    /// 끝에서부터 처음 만나는 해당 줄이 곧 정답이다.
-    /// firstUserPrompt는 채우지 않는다 — 그것이 필요한 경우는 aiTitle이 없는 경우뿐이고,
-    /// 그 경우는 scan()이 전체 재읽기(정방향 parse)로 처리한다.
-    static func parseTail(_ text: String, dropFirstLine: Bool) -> ParsedFields {
+    /// 꼬리에서 필요한 두 줄만 바이트 검색으로 찾아 그 줄만 파싱한다.
+    /// Swift String은 grapheme cluster 인지 처리 때문에 256KB를 문자열로 만들어
+    /// split 하는 것만으로도 비싸다. 그래서 String을 아예 만들지 않는다.
+    /// JSONSerialization은 Data를 직접 받으므로 문자열 변환이 필요 없다.
+    static func parseTail(_ data: Data, dropFirstLine: Bool) -> ParsedFields {
         var fields = ParsedFields()
-        var lines = text.split(separator: "\n", omittingEmptySubsequences: true)
-        if dropFirstLine && !lines.isEmpty {
-            lines.removeFirst()
+        let newline = UInt8(0x0A)
+
+        var region = data[...]
+        if dropFirstLine, let firstNL = region.firstIndex(of: newline) {
+            region = region[region.index(after: firstNL)...]
         }
 
-        var needTitle = true
-        var needMeta = true
+        /// pattern을 뒤에서부터 찾아, 그 줄 전체를 잘라 돌려준다.
+        /// 파싱에 실패하면(마지막 줄이 쓰이는 중이라 잘렸을 수 있다) 그 앞 줄로 물러나 다시 시도한다.
+        func lastRecord(containing pattern: String) -> [String: Any]? {
+            let needle = Data(pattern.utf8)
+            var search = region
+            for _ in 0..<3 {
+                guard let hit = search.range(of: needle, options: .backwards) else { return nil }
+                let lineStart = search[search.startIndex..<hit.lowerBound]
+                    .lastIndex(of: newline).map { search.index(after: $0) } ?? search.startIndex
+                let lineEnd = search[hit.upperBound...]
+                    .firstIndex(of: newline) ?? search.endIndex
 
-        for line in lines.reversed() {
-            if !needTitle && !needMeta { break }
-
-            // 값을 가질 수 없는 줄은 파싱하지 않는다.
-            let mayHaveTitle = needTitle && line.contains("\"ai-title\"")
-            let mayHaveMeta = needMeta && line.contains("\"cwd\"")
-            guard mayHaveTitle || mayHaveMeta else { continue }
-
-            guard let data = line.data(using: .utf8),
-                  let obj = try? JSONSerialization.jsonObject(with: data),
-                  let record = obj as? [String: Any]
-            else { continue }
-
-            if mayHaveTitle, let type = record["type"] as? String, type == "ai-title",
-               let title = record["aiTitle"] as? String, !title.isEmpty {
-                fields.aiTitle = title
-                needTitle = false
+                if let obj = try? JSONSerialization.jsonObject(with: Data(search[lineStart..<lineEnd])),
+                   let record = obj as? [String: Any] {
+                    return record
+                }
+                guard lineStart > search.startIndex else { return nil }
+                search = search[search.startIndex..<lineStart]   // 이 줄은 버리고 앞쪽에서 재시도
             }
-
-            if mayHaveMeta, let cwd = record["cwd"] as? String, !cwd.isEmpty {
-                fields.cwd = cwd
-                fields.sessionId = record["sessionId"] as? String
-                fields.gitBranch = (record["gitBranch"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-                needMeta = false
-            }
+            return nil
         }
+
+        if let record = lastRecord(containing: "\"ai-title\""),
+           (record["type"] as? String) == "ai-title",
+           let title = record["aiTitle"] as? String, !title.isEmpty {
+            fields.aiTitle = title
+        }
+
+        if let record = lastRecord(containing: "\"cwd\""),
+           let cwd = record["cwd"] as? String, !cwd.isEmpty {
+            fields.cwd = cwd
+            fields.sessionId = record["sessionId"] as? String
+            fields.gitBranch = (record["gitBranch"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        }
+
         return fields
     }
 
@@ -113,8 +117,8 @@ public struct SessionScanner {
     public static let tailBytes = 262_144
 
     /// 파일 끝에서 최대 `bytes`만큼 읽는다.
-    /// - Returns: 읽은 텍스트와, 앞이 잘렸는지 여부.
-    public static func readTail(_ url: URL, bytes: Int = tailBytes) throws -> (text: String, truncated: Bool) {
+    /// - Returns: 읽은 바이트와, 앞이 잘렸는지 여부.
+    public static func readTail(_ url: URL, bytes: Int = tailBytes) throws -> (data: Data, truncated: Bool) {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
 
@@ -123,7 +127,7 @@ public struct SessionScanner {
         let offset = truncated ? size - UInt64(bytes) : 0
         try handle.seek(toOffset: offset)
         let data = try handle.readToEnd() ?? Data()
-        return (String(decoding: data, as: UTF8.self), truncated)
+        return (data, truncated)
     }
 
     /// jsonl 파일 하나를 Session으로 바꾼다. cwd를 못 찾으면 nil.
@@ -134,8 +138,8 @@ public struct SessionScanner {
 
         guard let tail = try? readTail(logPath) else { return nil }
         var fields = tail.truncated
-            ? parseTail(tail.text, dropFirstLine: true)
-            : parse(tail.text, dropFirstLine: false)
+            ? parseTail(tail.data, dropFirstLine: true)
+            : parse(String(decoding: tail.data, as: UTF8.self), dropFirstLine: false)
 
         // 꼬리에서 제목이나 cwd를 못 찾았고 파일이 잘렸다면 전체를 다시 읽는다.
         if tail.truncated && (fields.aiTitle == nil || fields.cwd == nil) {
