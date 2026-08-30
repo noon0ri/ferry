@@ -3,13 +3,13 @@ import Foundation
 @testable import FerryCore
 
 @Test func 명령은_cd와_resume을_잇는다() {
-    let cmd = TerminalLauncher.command(cwd: "/Users/s/Codes/enigma", sessionId: "abc123")
-    #expect(cmd == "cd '/Users/s/Codes/enigma' && claude --resume abc123")
+    let cmd = TerminalLauncher.command(cwd: "/Users/me/Codes/alpha", sessionId: "abc123")
+    #expect(cmd == "cd '/Users/me/Codes/alpha' && claude --resume abc123")
 }
 
 @Test func 공백_경로를_인용한다() {
-    let cmd = TerminalLauncher.command(cwd: "/Users/s/Codes/interaction study", sessionId: "x")
-    #expect(cmd == "cd '/Users/s/Codes/interaction study' && claude --resume x")
+    let cmd = TerminalLauncher.command(cwd: "/Users/me/Codes/my project", sessionId: "x")
+    #expect(cmd == "cd '/Users/me/Codes/my project' && claude --resume x")
 }
 
 @Test func 작은따옴표_경로를_이스케이프한다() {

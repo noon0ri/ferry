@@ -12,7 +12,7 @@ func makeFixture(_ contents: String, name: String = "\(UUID().uuidString).jsonl"
 
 /// 실제 로그와 같은 모양의 최소 세션 본문.
 func sampleLog(sessionId: String = "01292266-bea7-439a-8174-de310dbb1f5f",
-               cwd: String = "/Users/seongbin/Codes/enigma",
+               cwd: String = "/Users/me/Codes/alpha",
                gitBranch: String? = "main",
                title: String? = "Enigma 퍼즐 파이프라인 그룹4 실행",
                prompt: String = "handoff.md를 읽어라") -> String {

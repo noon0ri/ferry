@@ -5,7 +5,7 @@ import Foundation
 @Test func 정상_로그에서_모든_필드를_뽑는다() {
     let fields = SessionScanner.parse(sampleLog(), dropFirstLine: false)
     #expect(fields.aiTitle == "Enigma 퍼즐 파이프라인 그룹4 실행")
-    #expect(fields.cwd == "/Users/seongbin/Codes/enigma")
+    #expect(fields.cwd == "/Users/me/Codes/alpha")
     #expect(fields.gitBranch == "main")
     #expect(fields.sessionId == "01292266-bea7-439a-8174-de310dbb1f5f")
     #expect(fields.firstUserPrompt == "handoff.md를 읽어라")
@@ -14,7 +14,7 @@ import Foundation
 @Test func gitBranch가_null이면_nil이다() {
     let fields = SessionScanner.parse(sampleLog(gitBranch: nil), dropFirstLine: false)
     #expect(fields.gitBranch == nil)
-    #expect(fields.cwd == "/Users/seongbin/Codes/enigma")
+    #expect(fields.cwd == "/Users/me/Codes/alpha")
 }
 
 @Test func aiTitle이_여러번이면_마지막_값을_쓴다() {
@@ -51,7 +51,7 @@ import Foundation
     let session = try #require(SessionScanner.scan(logPath: url))
     #expect(session.id == "01292266-bea7-439a-8174-de310dbb1f5f")
     #expect(session.title == "Enigma 퍼즐 파이프라인 그룹4 실행")
-    #expect(session.cwd == "/Users/seongbin/Codes/enigma")
+    #expect(session.cwd == "/Users/me/Codes/alpha")
     #expect(session.gitBranch == "main")
 }
 

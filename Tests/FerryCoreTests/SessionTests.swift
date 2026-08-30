@@ -3,15 +3,15 @@ import Foundation
 @testable import FerryCore
 
 @Test func 프로젝트명은_경로_마지막_성분이다() {
-    #expect(Project.displayName(for: "/Users/seongbin/Codes/enigma") == "enigma")
+    #expect(Project.displayName(for: "/Users/me/Codes/alpha") == "alpha")
 }
 
 @Test func 프로젝트명은_공백_포함_이름을_보존한다() {
-    #expect(Project.displayName(for: "/Users/seongbin/Codes/interaction study") == "interaction study")
+    #expect(Project.displayName(for: "/Users/me/Codes/my project") == "my project")
 }
 
 @Test func 프로젝트명은_끝의_슬래시를_무시한다() {
-    #expect(Project.displayName(for: "/Users/seongbin/Codes/figma/") == "figma")
+    #expect(Project.displayName(for: "/Users/me/Codes/beta/") == "beta")
 }
 
 @Test func 최근활동은_세션들_중_최댓값이다() {

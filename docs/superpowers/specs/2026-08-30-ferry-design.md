@@ -23,9 +23,9 @@ Ferry는 흩어진 Claude Code 세션을 한 목록에 모아 보여주고, 클�
 조사 결과 Claude Code는 모든 세션 로그에 `ai-title` 레코드를 기록하고 있다. 한국어 제목까지 자동 생성된다.
 
 ```
-enigma            "Enigma 퍼즐 파이프라인 그룹4 실행"
+alpha             "빌드 파이프라인 3단계 실행"
 figma             "Astryx 디자인 시스템 design.md"
-huddling-lab2     "웹 기반 인터랙티브 3D 아이콘 세트 만들기"
+my project        "웹 기반 인터랙티브 3D 아이콘 세트 만들기"
 ```
 
 또한 `claude --resume <session-id>`는 임의의 디렉토리에서 실행 가능하다.
@@ -161,9 +161,9 @@ struct Project: Identifiable {
 
 ### 6.1 그룹핑 키는 폴더명이 아니라 로그의 `cwd` 필드
 
-디렉토리명 `-Users-seongbin-Codes-side-scrolling-action-game`은 원래 경로로 **디코딩할 수 없다**. 하이픈이 경로 구분자인지 이름에 포함된 하이픈인지 구분할 방법이 없기 때문이다.
+디렉토리명 `-Users-me-Codes-my-side-project`는 원래 경로로 **디코딩할 수 없다**. 하이픈이 경로 구분자인지 이름에 포함된 하이픈인지 구분할 방법이 없기 때문이다.
 
-실제로 `~/Codes/side scrolling action game`(공백)처럼 공백을 쓰는 폴더와 하이픈을 쓰는 폴더가 섞여 있다. 폴더명 파싱은 반드시 깨진다.
+실제 사용자의 폴더에는 공백을 쓰는 것과 하이픈을 쓰는 것이 섞여 있었다. 폴더명 파싱은 반드시 깨진다.
 
 로그 내부 `cwd` 필드가 정답을 그대로 갖고 있으므로 이를 사용한다.
 
@@ -223,7 +223,7 @@ struct Project: Identifiable {
 
 `Info.plist`에 `NSAppleEventsUsageDescription`이 필요하다. 없으면 권한 다이얼로그가 뜨지 않고 조용히 실패한다.
 
-공백 경로는 가정이 아니라 현재 상태다. `claude work`, `interaction study`, `Fidget Toy`, `side scrolling action game` 네 곳이 해당한다.
+공백 경로는 가정이 아니라 현재 상태다. 개발 당시 실제 사용자의 프로젝트 폴더 네 곳이 여기 해당했다.
 
 ## 9. 테스트
 

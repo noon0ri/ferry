@@ -35,7 +35,7 @@ public struct Project: Identifiable, Equatable, Sendable {
     }
 
     /// 경로의 마지막 성분을 표시 이름으로 쓴다.
-    /// 디렉토리명(`-Users-seongbin-Codes-...`) 디코딩은 불가능하므로
+    /// 디렉토리명(`-Users-me-Codes-...`) 디코딩은 불가능하므로
     /// 반드시 로그 안의 `cwd` 값을 넘겨야 한다.
     public static func displayName(for path: String) -> String {
         var trimmed = path
