@@ -34,20 +34,12 @@ struct MenuBarView: View {
             } else {
                 list
             }
+            if let session = pendingDelete {
+                deleteConfirmation(session)
+            }
             footer
         }
         .frame(width: 320)
-        .confirmationDialog(
-            L("delete.title"),
-            isPresented: Binding(get: { pendingDelete != nil },
-                                 set: { if !$0 { pendingDelete = nil } }),
-            presenting: pendingDelete
-        ) { session in
-            Button(L("delete.confirm"), role: .destructive) { confirmDelete(session) }
-            Button(L("delete.cancel"), role: .cancel) { pendingDelete = nil }
-        } message: { session in
-            Text(L("delete.message", session.title, session.cwd, formattedSize(session)))
-        }
         .task {
             // .task는 뷰 생명주기당 한 번만 돈다. MenuBarExtra(.window)는 팝오버를
             // 닫아도 뷰를 버리지 않으므로, 한 번만 스캔하면 목록이 그대로 굳는다.
@@ -112,7 +104,8 @@ struct MenuBarView: View {
                 needed += CGFloat(project.sessions.count) * 39   // 세션 행(2줄)
             }
         }
-        let screenCap = (NSScreen.main?.visibleFrame.height ?? 800) - 140
+        var screenCap = (NSScreen.main?.visibleFrame.height ?? 800) - 140
+        if pendingDelete != nil { screenCap -= 160 }   // 확인 영역이 차지하는 만큼
         return min(max(needed, 160), min(900, screenCap))
     }
 
@@ -146,6 +139,40 @@ struct MenuBarView: View {
                 }
             }
         }
+    }
+
+    /// MenuBarExtra의 팝오버는 포커스를 잃으면 닫히는 패널이다. 그 위에 시스템 모달
+    /// (confirmationDialog/alert)을 띄우면 버튼을 누르는 순간 패널이 키 상태를 잃고
+    /// 사라지면서 액션이 실행되지 않는다. 그래서 확인을 팝오버 안에서 처리한다.
+    private func deleteConfirmation(_ session: Session) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L("delete.title")).fontWeight(.semibold).font(.callout)
+            Text(session.title)
+                .font(.caption)
+                .lineLimit(2)
+            Text(session.cwd)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Text(L("delete.detail", formattedSize(session)))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                Button(L("delete.confirm")) { confirmDelete(session) }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+                Button(L("delete.cancel")) { pendingDelete = nil }
+                    .buttonStyle(.bordered)
+                Spacer()
+            }
+            .font(.caption)
+            .padding(.top, 2)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.12))
     }
 
     private var footer: some View {

@@ -9,6 +9,6 @@
 "notice.launchFailed" = "Couldn't open Terminal, so the command was copied to the clipboard (check Automation permission)";
 "notice.deleteFailed" = "Couldn't delete: %@";
 "delete.title" = "Move this session to the Trash?";
-"delete.message" = "%1$@\n%2$@\nFrees %3$@ including subagent logs. You can restore it from the Trash, and `claude --resume` will no longer find it.";
+"delete.detail" = "Frees %@ including subagent logs. You can restore it from the Trash, and `claude --resume` will no longer find it.";
 "delete.confirm" = "Move to Trash";
 "delete.cancel" = "Cancel";

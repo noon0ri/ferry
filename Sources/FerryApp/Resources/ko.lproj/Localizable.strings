@@ -9,6 +9,6 @@
 "notice.launchFailed" = "Terminal을 열지 못해 명령을 클립보드에 복사했습니다 (자동화 권한을 확인해 보세요)";
 "notice.deleteFailed" = "삭제하지 못했습니다: %@";
 "delete.title" = "이 세션을 휴지통으로 옮길까요?";
-"delete.message" = "%1$@\n%2$@\n서브에이전트 로그를 포함해 %3$@를 비웁니다. 휴지통에서 되돌릴 수 있고, `claude --resume`으로는 더 이상 열리지 않습니다.";
+"delete.detail" = "서브에이전트 로그를 포함해 %@를 비웁니다. 휴지통에서 되돌릴 수 있고, `claude --resume`으로는 더 이상 열리지 않습니다.";
 "delete.confirm" = "휴지통으로 이동";
 "delete.cancel" = "취소";
