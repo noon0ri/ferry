@@ -119,3 +119,27 @@ import Foundation
     let big = try makeFixture(String(repeating: "가", count: 2000))
     #expect(try SessionScanner.readTail(big, bytes: 128).truncated == true)
 }
+
+@Test func 꼬리파싱은_마지막_레코드의_gitBranch를_쓴다() {
+    // 앞에서는 main이었지만 마지막 cwd 레코드는 null이다.
+    // 세션의 현재 상태는 "git 아님"이므로 nil이 맞다.
+    let text = """
+    {"type":"user","sessionId":"s1","cwd":"/tmp/p","gitBranch":"main"}
+    {"type":"ai-title","aiTitle":"제목","sessionId":"s1"}
+    {"type":"assistant","sessionId":"s1","cwd":"/tmp/p","gitBranch":null}
+    """
+    let fields = SessionScanner.parseTail(Data(text.utf8), dropFirstLine: false)
+    #expect(fields.gitBranch == nil)
+    #expect(fields.cwd == "/tmp/p")
+    #expect(fields.sessionId == "s1")
+    #expect(fields.aiTitle == "제목")
+}
+
+@Test func 꼬리파싱은_마지막_레코드에_브랜치가_있으면_가져온다() {
+    let text = """
+    {"type":"user","sessionId":"s1","cwd":"/tmp/p","gitBranch":null}
+    {"type":"assistant","sessionId":"s1","cwd":"/tmp/p","gitBranch":"feat/x"}
+    """
+    let fields = SessionScanner.parseTail(Data(text.utf8), dropFirstLine: false)
+    #expect(fields.gitBranch == "feat/x")
+}

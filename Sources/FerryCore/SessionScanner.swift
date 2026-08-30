@@ -89,6 +89,11 @@ public struct SessionScanner {
             fields.aiTitle = title
         }
 
+        // gitBranch는 마지막 cwd 레코드의 값을 그대로 쓴다 — null이면 nil이다.
+        // 세션의 "현재" 상태를 나타내는 값이므로 최신 레코드가 이긴다.
+        // 앞쪽에서 본 브랜치명을 들고 오면 폴더가 git 저장소가 아니게 된 뒤에도
+        // 낡은 값을 보고하게 된다. 정방향 parse()의 "마지막 non-null" 동작과는
+        // 여기서 의도적으로 갈린다.
         if let record = lastRecord(containing: "\"cwd\""),
            let cwd = record["cwd"] as? String, !cwd.isEmpty {
             fields.cwd = cwd
