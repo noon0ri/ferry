@@ -82,7 +82,9 @@ huddling-lab2     "웹 기반 인터랙티브 3D 아이콘 세트 만들기"
 
 ### 접근 방식
 
-SwiftUI `MenuBarExtra` + 온디맨드 스캔. macOS 13+, Swift 6.
+SwiftUI `MenuBarExtra` + 온디맨드 스캔. **macOS 14+**, Swift 6.
+
+`MenuBarExtra` 자체는 macOS 13+지만 `SessionStore`가 쓰는 Observation 프레임워크(`@Observable`)가 macOS 14+를 요구하므로 하한을 14로 잡는다.
 
 백그라운드 데몬이나 FSEvents 감시는 채택하지 않는다 (§7 성능 근거).
 
