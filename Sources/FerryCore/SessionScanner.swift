@@ -62,4 +62,49 @@ public struct SessionScanner {
         else { return nil }
         return trimmed
     }
+
+    public static let tailBytes = 262_144
+
+    /// 파일 끝에서 최대 `bytes`만큼 읽는다.
+    /// - Returns: 읽은 텍스트와, 앞이 잘렸는지 여부.
+    public static func readTail(_ url: URL, bytes: Int = tailBytes) throws -> (text: String, truncated: Bool) {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+
+        let size = try handle.seekToEnd()
+        let truncated = size > UInt64(bytes)
+        let offset = truncated ? size - UInt64(bytes) : 0
+        try handle.seek(toOffset: offset)
+        let data = try handle.readToEnd() ?? Data()
+        return (String(decoding: data, as: UTF8.self), truncated)
+    }
+
+    /// jsonl 파일 하나를 Session으로 바꾼다. cwd를 못 찾으면 nil.
+    public static func scan(logPath: URL) -> Session? {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: logPath.path),
+              let modifiedAt = attributes[.modificationDate] as? Date
+        else { return nil }
+
+        guard let tail = try? readTail(logPath) else { return nil }
+        var fields = parse(tail.text, dropFirstLine: tail.truncated)
+
+        // 꼬리에서 제목이나 cwd를 못 찾았고 파일이 잘렸다면 전체를 다시 읽는다.
+        if tail.truncated && (fields.aiTitle == nil || fields.cwd == nil) {
+            if let whole = try? String(contentsOf: logPath, encoding: .utf8) {
+                fields = parse(whole, dropFirstLine: false)
+            }
+        }
+
+        guard let cwd = fields.cwd else { return nil }
+
+        let id = fields.sessionId
+            ?? logPath.deletingPathExtension().lastPathComponent
+        let title = fields.aiTitle
+            ?? fields.firstUserPrompt
+            ?? String(id.prefix(8))
+
+        return Session(id: id, logPath: logPath, cwd: cwd,
+                       title: title, gitBranch: fields.gitBranch,
+                       modifiedAt: modifiedAt)
+    }
 }

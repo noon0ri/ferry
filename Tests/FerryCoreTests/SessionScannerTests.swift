@@ -44,3 +44,78 @@ import Foundation
     #expect(SessionScanner.parse(text, dropFirstLine: true).aiTitle == nil)
     #expect(SessionScanner.parse(text, dropFirstLine: false).aiTitle == "버려야 할 줄")
 }
+
+@Test func 파일을_스캔해_세션을_만든다() throws {
+    let url = try makeFixture(sampleLog(),
+                              name: "01292266-bea7-439a-8174-de310dbb1f5f.jsonl")
+    let session = try #require(SessionScanner.scan(logPath: url))
+    #expect(session.id == "01292266-bea7-439a-8174-de310dbb1f5f")
+    #expect(session.title == "Enigma 퍼즐 파이프라인 그룹4 실행")
+    #expect(session.cwd == "/Users/seongbin/Codes/enigma")
+    #expect(session.gitBranch == "main")
+}
+
+@Test func 제목이_없으면_첫_프롬프트로_폴백한다() throws {
+    let url = try makeFixture(sampleLog(title: nil, prompt: "npm install이 실패해"))
+    let session = try #require(SessionScanner.scan(logPath: url))
+    #expect(session.title == "npm install이 실패해")
+}
+
+@Test func 제목과_프롬프트가_없으면_id_앞_8자를_쓴다() throws {
+    let text = """
+    {"type":"assistant","sessionId":"abcdef12-3456-7890-abcd-ef1234567890","cwd":"/tmp/p"}
+    """
+    let url = try makeFixture(text)
+    let session = try #require(SessionScanner.scan(logPath: url))
+    #expect(session.title == "abcdef12")
+}
+
+@Test func 손상된_라인이_섞여도_나머지를_파싱한다() throws {
+    let text = """
+    {"type":"user","sessionId":"s1","cwd":"/tmp/p"}
+    이건 JSON이 아니다
+    {"type":"ai-title","aiTitle":"살아남은 제목","sessionId":"s1"}
+    {"broken":
+    """
+    let url = try makeFixture(text)
+    let session = try #require(SessionScanner.scan(logPath: url))
+    #expect(session.title == "살아남은 제목")
+}
+
+@Test func 빈_파일은_nil을_반환한다() throws {
+    let url = try makeFixture("")
+    #expect(SessionScanner.scan(logPath: url) == nil)
+}
+
+@Test func cwd가_없으면_nil을_반환한다() throws {
+    let text = """
+    {"type":"ai-title","aiTitle":"cwd 없음","sessionId":"s1"}
+    """
+    let url = try makeFixture(text)
+    #expect(SessionScanner.scan(logPath: url) == nil)
+}
+
+@Test func 꼬리에_제목이_없으면_전체를_다시_읽는다() throws {
+    // 제목을 맨 앞에 두고, 꼬리 예산을 넘기는 더미를 뒤에 채운다
+    let filler = (0..<2000).map { i in
+        "{\"type\":\"assistant\",\"sessionId\":\"s1\",\"cwd\":\"/tmp/p\",\"n\":\(i),\"pad\":\"\(String(repeating: "x", count: 200))\"}"
+    }.joined(separator: "\n")
+    let text = """
+    {"type":"ai-title","aiTitle":"맨 앞의 제목","sessionId":"s1"}
+    {"type":"user","sessionId":"s1","cwd":"/tmp/p"}
+    \(filler)
+    """
+    #expect(text.utf8.count > SessionScanner.tailBytes)
+
+    let url = try makeFixture(text)
+    let session = try #require(SessionScanner.scan(logPath: url))
+    #expect(session.title == "맨 앞의 제목")
+}
+
+@Test func 꼬리_읽기는_잘림_여부를_알려준다() throws {
+    let small = try makeFixture("한 줄\n")
+    #expect(try SessionScanner.readTail(small, bytes: 1024).truncated == false)
+
+    let big = try makeFixture(String(repeating: "가", count: 2000))
+    #expect(try SessionScanner.readTail(big, bytes: 128).truncated == true)
+}
