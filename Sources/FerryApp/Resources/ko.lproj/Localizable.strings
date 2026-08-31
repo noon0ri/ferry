@@ -21,3 +21,6 @@
 "action.newSession" = "여기에 새 세션";
 "dot.hasTerminal" = "터미널 창이 열려 있습니다 — 클릭하면 그 창으로";
 "dot.noTerminal" = "클릭하면 새 터미널 창이 열립니다";
+"action.moveTo" = "다른 그룹으로 이동";
+"move.pending %@" = "다음 재개 시 %@ 로 이동합니다";
+"move.cancel" = "이동 취소";

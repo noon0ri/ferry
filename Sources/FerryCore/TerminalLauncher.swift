@@ -82,12 +82,16 @@ public struct TerminalLauncher {
 
     /// 이미 이 세션으로 열어둔 창이 살아 있으면 그 창을 앞으로 가져오고,
     /// 없으면 새 창에서 재개한다.
+    ///
+    /// - Parameter movingTo: 다른 폴더로 옮기는 재개라면 그 경로.
+    ///   이 경우 기존 창을 포커스하지 않는다. 그 창은 옛 폴더에 있어서,
+    ///   거기로 가면 이동이 영영 일어나지 않기 때문이다.
     @discardableResult
-    public func launch(_ session: Session) -> LaunchOutcome {
-        if let tty = registry.liveTTY(for: session.id), focusTerminal(tty: tty) {
+    public func launch(_ session: Session, movingTo target: String? = nil) -> LaunchOutcome {
+        if target == nil, let tty = registry.liveTTY(for: session.id), focusTerminal(tty: tty) {
             return .focused
         }
-        let outcome = send(Self.command(cwd: session.cwd, sessionId: session.id),
+        let outcome = send(Self.command(cwd: target ?? session.cwd, sessionId: session.id),
                            recordTTYFor: session.id)
         if outcome == .copiedToClipboard {
             // 실행하지 못했으므로 낡은 기록을 남겨두지 않는다.

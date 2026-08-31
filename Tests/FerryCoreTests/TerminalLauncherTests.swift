@@ -87,7 +87,7 @@ private final class Box: @unchecked Sendable {
 }
 
 /// 메모리 저장소. 실제 UserDefaults를 건드리지 않는다.
-private final class MemoryStore: SessionTerminalRegistry.Store, @unchecked Sendable {
+private final class MemoryStore: KeyValueStore, @unchecked Sendable {
     private let lock = NSLock()
     private var values: [String: String] = [:]
     func string(forKey key: String) -> String? { lock.withLock { values[key] } }
@@ -272,4 +272,34 @@ private final class MemoryStore: SessionTerminalRegistry.Store, @unchecked Senda
 
     // 두 번 읽어도 같아야 한다. ctime을 지문으로 썼을 때 여기서 깨졌다.
     #expect(TTYProbe.fingerprint(of: live[0]) == TTYProbe.fingerprint(of: live[0]))
+}
+
+@Test func 이동_재개는_목표_폴더에서_연다() {
+    let registry = SessionTerminalRegistry(store: MemoryStore(), fingerprint: { _ in "fp" })
+    let runner = StubRunner(shouldThrow: false)
+    runner.responses = ["/dev/ttys012"]
+    let launcher = TerminalLauncher(runner: runner, copyToClipboard: { _ in }, registry: registry)
+
+    let outcome = launcher.launch(makeSession(), movingTo: "/Codes/ferry")
+
+    #expect(outcome == .launched)
+    #expect(runner.scripts[0].contains("cd '/Codes/ferry'"))
+    #expect(runner.scripts[0].contains("--resume s1"))
+}
+
+@Test func 이동_예약이_있으면_열린_창을_포커스하지_않는다() {
+    // 기존 창은 옛 폴더에 있다. 거기로 가면 이동이 영영 일어나지 않는다.
+    let store = MemoryStore()
+    let registry = SessionTerminalRegistry(store: store, fingerprint: { _ in "fp" })
+    registry.record(tty: "/dev/ttys003", for: "s1")
+
+    let runner = StubRunner(shouldThrow: false)
+    runner.responses = ["found", "/dev/ttys013"]
+    let launcher = TerminalLauncher(runner: runner, copyToClipboard: { _ in }, registry: registry)
+
+    let outcome = launcher.launch(makeSession(), movingTo: "/Codes/ferry")
+
+    #expect(outcome == .launched)
+    #expect(runner.scripts.count == 1)                       // 포커스 시도 없음
+    #expect(runner.scripts[0].contains("cd '/Codes/ferry'"))
 }

@@ -21,6 +21,7 @@ struct MenuBarView: View {
     @State private var noticeSetAt: Date?
     @State private var missingPaths: Set<String> = []
     @State private var liveSessions: Set<String> = []
+    @State private var pendingMoves: [String: String] = [:]
     @State private var loadState: LoadState = .loading
     @State private var pendingDelete: Session?
     @State private var pendingRename: Session?
@@ -33,6 +34,7 @@ struct MenuBarView: View {
 
     private let launcher = TerminalLauncher()
     private let registry = SessionTerminalRegistry()
+    private let moves = SessionMoveRegistry()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -58,6 +60,7 @@ struct MenuBarView: View {
                 await store.refreshAsync()
                 updateMissingPaths()
                 updateLiveSessions()
+                updatePendingMoves()
                 applyInitialExpansion()
                 loadState = .loaded
                 clearStaleNotice()
@@ -74,8 +77,24 @@ struct MenuBarView: View {
                         ForEach(project.sessions) { session in
                             SessionRow(session: session,
                                        exists: !missingPaths.contains(session.cwd),
-                                       hasTerminal: liveSessions.contains(session.id)) { open(session) }
+                                       hasTerminal: liveSessions.contains(session.id),
+                                       movingTo: pendingMoves[session.id]) { open(session) }
                                 .contextMenu {
+                                    Menu(L("action.moveTo")) {
+                                        ForEach(store.projects.filter { $0.path != session.cwd }) { other in
+                                            Button(other.name) {
+                                                moves.schedule(other.path, for: session.id)
+                                                updatePendingMoves()
+                                            }
+                                        }
+                                    }
+                                    if pendingMoves[session.id] != nil {
+                                        Button(L("move.cancel")) {
+                                            moves.cancel(session.id)
+                                            updatePendingMoves()
+                                        }
+                                    }
+                                    Divider()
                                     Button(L("action.renameSession")) {
                                         renameText = session.title
                                         withAnimation(.spring(response: 0.3, dampingFraction: 1)) {
@@ -301,6 +320,7 @@ struct MenuBarView: View {
                         await store.refreshAsync()
                         updateMissingPaths()
                         updateLiveSessions()
+                        updatePendingMoves()
                     }
                 }
                 Spacer()
@@ -362,6 +382,17 @@ struct MenuBarView: View {
         liveSessions = Set(ids.filter { registry.isLive($0) })
     }
 
+    /// 예약 목록을 다시 읽는다. 이미 목적지에 도착한 예약은 여기서 정리된다.
+    private func updatePendingMoves() {
+        let sessions = store.projects.flatMap(\.sessions)
+        moves.reconcile(sessions)
+        var found: [String: String] = [:]
+        for session in sessions {
+            if let target = moves.target(for: session.id) { found[session.id] = target }
+        }
+        pendingMoves = found
+    }
+
     private func newSession(in project: Project) {
         guard FileManager.default.fileExists(atPath: project.path) else {
             setNotice(L("notice.folderMissing", project.path))
@@ -383,7 +414,9 @@ struct MenuBarView: View {
             setNotice(L("notice.folderMissing", session.cwd))
             return
         }
-        switch launcher.launch(session) {
+        // 이동 예약이 있으면 그 폴더에서 연다. 기존 창 포커스는 건너뛴다 —
+        // 그 창은 옛 폴더에 있어서, 거기로 가면 이동이 일어나지 않는다.
+        switch launcher.launch(session, movingTo: pendingMoves[session.id]) {
         case .launched, .focused:
             notice = nil
             noticeSetAt = nil
@@ -410,6 +443,8 @@ private struct SessionRow: View {
     let exists: Bool
     /// 이 세션의 터미널 창이 아직 열려 있는가. 점 색과 클릭 결과가 여기서 갈린다.
     let hasTerminal: Bool
+    /// 다음 재개 때 옮겨갈 폴더. 아직 옮겨지지 않았으므로 행은 원래 그룹에 남는다.
+    let movingTo: String?
     let action: () -> Void
 
     var body: some View {
@@ -428,6 +463,11 @@ private struct SessionRow: View {
                         Text(relativeTime)
                         if let branch = session.gitBranch {
                             Text("· \(branch)")
+                        }
+                        if let movingTo {
+                            Text("→ \((movingTo as NSString).lastPathComponent)")
+                                .foregroundStyle(.orange)
+                                .help(L("move.pending %@", (movingTo as NSString).lastPathComponent))
                         }
                     }
                     .font(.caption2)

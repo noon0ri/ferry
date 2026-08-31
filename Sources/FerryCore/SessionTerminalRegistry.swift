@@ -14,19 +14,13 @@ import Foundation
 /// 목록을 그릴 때마다 세션별로 물어봐도 부담이 없다.
 public struct SessionTerminalRegistry: Sendable {
 
-    /// 테스트가 메모리 구현을 끼워 넣을 수 있도록 최소 인터페이스만 요구한다.
-    public protocol Store: AnyObject, Sendable {
-        func string(forKey key: String) -> String?
-        func set(_ value: String?, forKey key: String)
-    }
-
-    private let store: Store
+    private let store: KeyValueStore
     /// tty 경로 → 지문. 기본 구현은 장치 파일의 ctime을 읽는다.
     private let fingerprint: @Sendable (String) -> String?
     private static let prefix = "terminal.tty."
     private static let separator = "\u{1F}"
 
-    public init(store: Store = UserDefaults.standard,
+    public init(store: KeyValueStore = UserDefaults.standard,
                 fingerprint: @escaping @Sendable (String) -> String? = TTYProbe.fingerprint) {
         self.store = store
         self.fingerprint = fingerprint
@@ -56,15 +50,5 @@ public struct SessionTerminalRegistry: Sendable {
 
     public func forget(_ sessionId: String) {
         store.set(nil, forKey: Self.prefix + sessionId)
-    }
-}
-
-extension UserDefaults: SessionTerminalRegistry.Store {
-    public func set(_ value: String?, forKey key: String) {
-        if let value {
-            setValue(value, forKey: key)
-        } else {
-            removeObject(forKey: key)
-        }
     }
 }
