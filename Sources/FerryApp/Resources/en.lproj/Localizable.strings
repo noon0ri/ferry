@@ -24,5 +24,8 @@
 "action.moveTo" = "Move to Group";
 "move.pending %@" = "Will move to %@ on next resume";
 "move.cancel" = "Cancel Move";
-"move.memoryWarning %d" = "%d memory files stay behind — copy them yourself if you need them";
+"move.memoryWarning %d" = "%d memory files stay behind";
 "move.pendingWithMemory %1$@ %2$d" = "Will move to %1$@ on next resume. %2$d memory files stay behind.";
+"move.chooseFolder" = "Other Folder…";
+"move.chooseFolderPrompt" = "Choose the folder to move this session to";
+"move.notADirectory" = "That is not a folder";

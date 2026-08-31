@@ -14,7 +14,8 @@ private func L(_ key: String, _ args: CVarArg...) -> String {
 struct MenuBarView: View {
     private enum LoadState { case loading, loaded }
 
-    @State private var store = SessionStore()
+    private static let moveRegistry = SessionMoveRegistry()
+    @State private var store = SessionStore(moves: MenuBarView.moveRegistry)
     @State private var expanded: Set<String> = []
     @State private var didSetInitialExpansion = false
     @State private var notice: String?
@@ -34,7 +35,7 @@ struct MenuBarView: View {
 
     private let launcher = TerminalLauncher()
     private let registry = SessionTerminalRegistry()
-    private let moves = SessionMoveRegistry()
+    private var moves: SessionMoveRegistry { MenuBarView.moveRegistry }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -83,17 +84,12 @@ struct MenuBarView: View {
                                 .contextMenu {
                                     Menu(L("action.moveTo")) {
                                         ForEach(store.projects.filter { $0.path != session.cwd }) { other in
-                                            Button(other.name) {
-                                                moves.schedule(other.path, for: session.id)
-                                                updatePendingMoves()
-                                                // 메모리는 프로젝트 디렉토리 단위라 따라가지 않는다.
-                                                // 조용히 잃게 두지 않고 알린다.
-                                                let count = ProjectMemory.fileCount(for: session)
-                                                if count > 0 {
-                                                    setNotice(L("move.memoryWarning %d", count))
-                                                }
-                                            }
+                                            Button(other.name) { scheduleMove(session, to: other.path) }
                                         }
+                                        // Ferry는 이미 세션이 있는 폴더만 안다. 아직 세션이 없는
+                                        // 폴더로는 목록만으로 옮길 수 없으므로 직접 고르게 한다.
+                                        Divider()
+                                        Button(L("move.chooseFolder")) { chooseFolder(for: session) }
                                     }
                                     if pendingMoves[session.id] != nil {
                                         Button(L("move.cancel")) {
@@ -319,6 +315,8 @@ struct MenuBarView: View {
                 Text(notice)
                     .font(.caption)
                     .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)   // 잘리지 않고 줄바꿈
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             Divider()
             HStack {
@@ -389,13 +387,52 @@ struct MenuBarView: View {
         liveSessions = Set(ids.filter { registry.isLive($0) })
     }
 
+    private func scheduleMove(_ session: Session, to path: String) {
+        moves.schedule(path, for: session.id)
+        updatePendingMoves()
+        // 메모리는 프로젝트 디렉토리 단위라 따라가지 않는다. 조용히 잃게 두지 않고 알린다.
+        let count = ProjectMemory.fileCount(for: session)
+        if count > 0 {
+            setNotice(L("move.memoryWarning %d", count))
+        }
+    }
+
+    /// 아직 세션이 없는 폴더로 옮기기 위한 표준 폴더 선택 창.
+    ///
+    /// 팝오버는 포커스를 잃으면 닫히지만, 메뉴 항목을 누르는 순간 이 코드가 먼저 돌아
+    /// 창을 띄우므로 상관없다. 앱이 accessory(LSUIElement)라 패널을 앞으로 가져오려면
+    /// 먼저 활성화해야 한다.
+    private func chooseFolder(for session: Session) {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.message = L("move.chooseFolderPrompt")
+        panel.prompt = L("action.moveTo")
+        // 형제 프로젝트가 한눈에 보이도록 현재 폴더의 상위에서 시작한다.
+        panel.directoryURL = URL(fileURLWithPath: session.cwd).deletingLastPathComponent()
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            setNotice(L("move.notADirectory"))
+            return
+        }
+        scheduleMove(session, to: url.path)
+    }
+
     /// 예약 목록을 다시 읽는다. 이미 목적지에 도착한 예약은 여기서 정리된다.
     private func updatePendingMoves() {
         let sessions = store.projects.flatMap(\.sessions)
         moves.reconcile(sessions)
         var found: [String: String] = [:]
         for session in sessions {
-            if let target = moves.target(for: session.id) { found[session.id] = target }
+            if let target = moves.pendingTarget(for: session.id) { found[session.id] = target }
         }
         pendingMoves = found
     }
@@ -423,9 +460,20 @@ struct MenuBarView: View {
         }
         // 이동 예약이 있으면 그 폴더에서 연다. 기존 창 포커스는 건너뛴다 —
         // 그 창은 옛 폴더에 있어서, 거기로 가면 이동이 일어나지 않는다.
-        switch launcher.launch(session, movingTo: pendingMoves[session.id]) {
+        let moveTarget = moves.target(for: session.id)
+        switch launcher.launch(session, movingTo: moveTarget) {
         case .launched, .focused:
             notice = nil
+            // 그 폴더에서 실제로 열었다면 사용자가 결정을 실행한 것이다.
+            // 로그의 cwd는 첫 메시지 전까지 갱신되지 않으므로 그 사이를 메운다.
+            if moveTarget != nil {
+                moves.markApplied(session.id)
+                Task {
+                    await store.refreshAsync()
+                    updateMissingPaths()
+                    updatePendingMoves()
+                }
+            }
             noticeSetAt = nil
         case .copiedToClipboard:
             setNotice(L("notice.launchFailed"))

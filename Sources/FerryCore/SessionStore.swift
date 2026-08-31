@@ -9,6 +9,7 @@ public final class SessionStore {
     private let root: URL
     private let scan: @Sendable (URL) -> Session?
     private var cache: [URL: CacheEntry] = [:]
+    private let moves: SessionMoveRegistry
     private var inFlight: Task<Void, Never>?
 
     struct CacheEntry: Sendable {
@@ -22,9 +23,11 @@ public final class SessionStore {
     }
 
     public init(root: URL = SessionStore.defaultRoot,
-                scan: @escaping @Sendable (URL) -> Session? = { SessionScanner.scan(logPath: $0) }) {
+                scan: @escaping @Sendable (URL) -> Session? = { SessionScanner.scan(logPath: $0) },
+                moves: SessionMoveRegistry = SessionMoveRegistry()) {
         self.root = root
         self.scan = scan
+        self.moves = moves
     }
 
     /// 로그 루트를 훑어 projects를 다시 만든다.
@@ -32,7 +35,7 @@ public final class SessionStore {
     public func refresh() {
         let result = Self.scanAll(root: root, scan: scan, cache: cache)
         cache = result.cache
-        projects = Self.group(result.sessions)
+        projects = group(result.sessions)
     }
 
     /// 스캔을 백그라운드에서 돌리고 결과만 main에서 반영한다.
@@ -51,7 +54,7 @@ public final class SessionStore {
 
             guard !Task.isCancelled else { return }
             self.cache = result.cache
-            self.projects = Self.group(result.sessions)
+            self.projects = group(result.sessions)
         }
         inFlight = task
         await task.value
@@ -104,8 +107,11 @@ public final class SessionStore {
     }
 
     /// cwd로 묶고 스펙 §4의 표시 규칙대로 정렬한다.
-    static func group(_ sessions: [Session]) -> [Project] {
-        Dictionary(grouping: sessions, by: \.cwd)
+    ///
+    /// 이동을 실행한 세션은 로그의 cwd가 아직 옛 폴더일 수 있다. 사용자가 첫 메시지를
+    /// 보내야 Claude Code가 새 cwd를 기록하기 때문이다. 그 사이에도 옮긴 곳으로 보여준다.
+    func group(_ sessions: [Session]) -> [Project] {
+        Dictionary(grouping: sessions, by: { moves.appliedTarget(for: $0.id) ?? $0.cwd })
             .map { path, group in
                 Project(path: path, sessions: group.sorted { $0.modifiedAt > $1.modifiedAt })
             }
