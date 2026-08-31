@@ -66,6 +66,31 @@ cp -R build/Ferry.app /Applications/
 
 Requires Xcode 26 or later (Swift 6.3). A locally built app carries no quarantine attribute, so the `xattr` step above is unnecessary. To update: `git pull && ./Scripts/bundle.sh`.
 
+### Updating
+
+`releases/latest/download` always points at the newest release, so this block works regardless
+of which version you have.
+
+```bash
+cd ~/Downloads
+curl -L -o Ferry.zip https://github.com/noon0ri/ferry/releases/latest/download/Ferry.zip
+pkill -x Ferry 2>/dev/null
+unzip -o Ferry.zip
+rm -rf /Applications/Ferry.app && mv Ferry.app /Applications/
+xattr -dr com.apple.quarantine /Applications/Ferry.app
+open /Applications/Ferry.app
+```
+
+Quitting first matters — replacing the bundle while it runs leaves the old code running until
+relaunch. Session names, pending moves and terminal records live in `UserDefaults` keyed by the
+bundle identifier, so they survive the update. Session logs are never touched.
+
+macOS may ask for Automation permission again. Ad-hoc signing mints a new signing identity on
+every build, and the permission is tied to the signature as well as the bundle identifier.
+Being asked again is expected; so is not being asked.
+
+If you built from source, `git pull && ./Scripts/bundle.sh` is enough.
+
 ### Launch at login
 
 System Settings → General → Login Items → add Ferry.

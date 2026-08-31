@@ -75,6 +75,29 @@ cp -R build/Ferry.app /Applications/
 Xcode 26 이상이 필요하다(Swift 6.3). 빌드한 앱은 격리 속성이 붙지 않으므로 위의
 `xattr` 단계가 필요 없다. 업데이트는 `git pull && ./Scripts/bundle.sh`.
 
+### 업데이트
+
+`releases/latest/download`는 항상 최신 릴리스를 가리키므로, 지금 어느 버전을 쓰든 아래가 그대로 통한다.
+
+```bash
+cd ~/Downloads
+curl -L -o Ferry.zip https://github.com/noon0ri/ferry/releases/latest/download/Ferry.zip
+pkill -x Ferry 2>/dev/null
+unzip -o Ferry.zip
+rm -rf /Applications/Ferry.app && mv Ferry.app /Applications/
+xattr -dr com.apple.quarantine /Applications/Ferry.app
+open /Applications/Ferry.app
+```
+
+먼저 종료하는 것이 중요하다. 실행 중에 번들만 바꾸면 다시 띄우기 전까지 옛 코드가 계속 돈다.
+세션 이름·이동 예약·터미널 기록은 번들 식별자로 묶인 `UserDefaults`에 있어 업데이트에도 남는다.
+세션 로그는 애초에 건드리지 않는다.
+
+자동화 권한을 다시 물어볼 수 있다. 애드혹 서명은 빌드마다 서명 신원이 새로 생기고, 권한은
+번들 식별자뿐 아니라 서명에도 묶이기 때문이다. 다시 묻는 것도, 묻지 않는 것도 모두 정상이다.
+
+소스에서 빌드했다면 `git pull && ./Scripts/bundle.sh` 로 끝난다.
+
 ### 로그인 시 자동 실행
 
 시스템 설정 → 일반 → 로그인 항목 에서 Ferry를 추가한다.
