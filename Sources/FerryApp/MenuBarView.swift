@@ -78,13 +78,20 @@ struct MenuBarView: View {
                             SessionRow(session: session,
                                        exists: !missingPaths.contains(session.cwd),
                                        hasTerminal: liveSessions.contains(session.id),
-                                       movingTo: pendingMoves[session.id]) { open(session) }
+                                       movingTo: pendingMoves[session.id],
+                                       memoryCount: ProjectMemory.fileCount(for: session)) { open(session) }
                                 .contextMenu {
                                     Menu(L("action.moveTo")) {
                                         ForEach(store.projects.filter { $0.path != session.cwd }) { other in
                                             Button(other.name) {
                                                 moves.schedule(other.path, for: session.id)
                                                 updatePendingMoves()
+                                                // 메모리는 프로젝트 디렉토리 단위라 따라가지 않는다.
+                                                // 조용히 잃게 두지 않고 알린다.
+                                                let count = ProjectMemory.fileCount(for: session)
+                                                if count > 0 {
+                                                    setNotice(L("move.memoryWarning %d", count))
+                                                }
                                             }
                                         }
                                     }
@@ -445,6 +452,8 @@ private struct SessionRow: View {
     let hasTerminal: Bool
     /// 다음 재개 때 옮겨갈 폴더. 아직 옮겨지지 않았으므로 행은 원래 그룹에 남는다.
     let movingTo: String?
+    /// 이 프로젝트에 딸린 메모리 파일 수. 이동하면 따라가지 않으므로 툴팁에 밝힌다.
+    let memoryCount: Int
     let action: () -> Void
 
     var body: some View {
@@ -465,9 +474,12 @@ private struct SessionRow: View {
                             Text("· \(branch)")
                         }
                         if let movingTo {
-                            Text("→ \((movingTo as NSString).lastPathComponent)")
+                            let name = (movingTo as NSString).lastPathComponent
+                            Text("→ \(name)")
                                 .foregroundStyle(.orange)
-                                .help(L("move.pending %@", (movingTo as NSString).lastPathComponent))
+                                .help(memoryCount > 0
+                                      ? L("move.pendingWithMemory %1$@ %2$d", name, memoryCount)
+                                      : L("move.pending %@", name))
                         }
                     }
                     .font(.caption2)

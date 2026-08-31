@@ -24,3 +24,5 @@
 "action.moveTo" = "다른 그룹으로 이동";
 "move.pending %@" = "다음 재개 시 %@ 로 이동합니다";
 "move.cancel" = "이동 취소";
+"move.memoryWarning %d" = "메모리 %d개는 따라가지 않습니다 — 필요하면 직접 복사하세요";
+"move.pendingWithMemory %1$@ %2$d" = "다음 재개 시 %1$@ 로 이동합니다. 메모리 %2$d개는 따라가지 않습니다.";

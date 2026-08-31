@@ -22,6 +22,13 @@
 - **`RelativeDateTimeFormatter`의 로케일 고착** — static으로 올려서, 세션 도중 시스템 로케일을
   바꾸면 반영되지 않는다.
 
+## 표시
+
+- **제목 폴백이 슬래시 명령 원문을 그대로 보여준다** — `ai-title`도 `custom-title`도 없는
+  세션은 첫 사용자 프롬프트로 폴백하는데, 그것이 `<command-message>...</command-message>`
+  같은 슬래시 명령 원문이면 그대로 노출된다. 실제 코퍼스에 한 건 있다.
+  폴백 단계에서 그런 마크업을 걸러내거나, 사용자가 이름을 붙이면 해결된다.
+
 ## 설계상 남겨둔 것
 
 - **`SessionStore.refresh()`와 `refreshAsync()`의 스레딩 계약이 다름** — 전자는 non-isolated 동기,

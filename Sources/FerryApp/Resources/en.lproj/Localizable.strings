@@ -24,3 +24,5 @@
 "action.moveTo" = "Move to Group";
 "move.pending %@" = "Will move to %@ on next resume";
 "move.cancel" = "Cancel Move";
+"move.memoryWarning %d" = "%d memory files stay behind — copy them yourself if you need them";
+"move.pendingWithMemory %1$@ %2$d" = "Will move to %1$@ on next resume. %2$d memory files stay behind.";
