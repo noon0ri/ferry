@@ -23,6 +23,9 @@ struct MenuBarView: View {
     @State private var missingPaths: Set<String> = []
     @State private var liveSessions: Set<String> = []
     @State private var pendingMoves: [String: String] = [:]
+    @State private var hiddenIds: Set<String> = []
+    /// 숨긴 세션을 되돌아보는 모드. 삭제는 여기서만 꺼낼 수 있다.
+    @State private var showingHidden = false
     @State private var loadState: LoadState = .loading
     @State private var pendingDelete: Session?
     @State private var pendingRename: Session?
@@ -36,10 +39,11 @@ struct MenuBarView: View {
     private let launcher = TerminalLauncher()
     private let registry = SessionTerminalRegistry()
     private var moves: SessionMoveRegistry { MenuBarView.moveRegistry }
+    private let hides = SessionHideRegistry()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if store.projects.isEmpty {
+            if visibleProjects.isEmpty {
                 emptyState
             } else {
                 list
@@ -62,6 +66,7 @@ struct MenuBarView: View {
                 updateMissingPaths()
                 updateLiveSessions()
                 updatePendingMoves()
+                updateHidden()
                 applyInitialExpansion()
                 loadState = .loaded
                 clearStaleNotice()
@@ -73,7 +78,7 @@ struct MenuBarView: View {
     private var list: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 2) {
-                ForEach(store.projects) { project in
+                ForEach(visibleProjects) { project in
                     DisclosureGroup(isExpanded: binding(for: project)) {
                         ForEach(project.sessions) { session in
                             SessionRow(session: session,
@@ -82,6 +87,20 @@ struct MenuBarView: View {
                                        movingTo: pendingMoves[session.id],
                                        memoryCount: ProjectMemory.fileCount(for: session)) { open(session) }
                                 .contextMenu {
+                                    if showingHidden {
+                                        // 숨긴 것을 되돌아보는 자리. 삭제는 여기서만 나온다.
+                                        Button(L("action.reveal")) {
+                                            hides.reveal(session.id)
+                                            updateHidden()
+                                        }
+                                        Divider()
+                                        Button(L("action.deleteSession"), role: .destructive) {
+                                            withAnimation(.spring(response: 0.3, dampingFraction: 1)) {
+                                                pendingRename = nil
+                                                pendingDelete = session
+                                            }
+                                        }
+                                    } else {
                                     Menu(L("action.moveTo")) {
                                         ForEach(store.projects.filter { $0.path != session.cwd }) { other in
                                             Button(other.name) { scheduleMove(session, to: other.path) }
@@ -105,11 +124,10 @@ struct MenuBarView: View {
                                             pendingRename = session
                                         }
                                     }
-                                    Button(L("action.deleteSession"), role: .destructive) {
-                                        withAnimation(.spring(response: 0.3, dampingFraction: 1)) {
-                                            pendingRename = nil
-                                            pendingDelete = session
-                                        }
+                                    Button(L("action.hide")) {
+                                        hides.hide(session.id)
+                                        updateHidden()
+                                    }
                                     }
                                 }
                         }
@@ -169,7 +187,7 @@ struct MenuBarView: View {
     /// 펼쳐진 그룹만큼 늘어나고, 화면 높이를 넘지 않는다.
     private var listHeight: CGFloat {
         var needed: CGFloat = 16                       // LazyVStack 위아래 여백
-        for project in store.projects {
+        for project in visibleProjects {
             needed += 26                               // 그룹 헤더 한 줄
             if expanded.contains(project.id) {
                 needed += CGFloat(project.sessions.count) * 39   // 세션 행(2줄)
@@ -192,7 +210,12 @@ struct MenuBarView: View {
                 }
                 .padding(16)
             case .loaded:
-                if FileManager.default.fileExists(atPath: SessionStore.defaultRoot.path) {
+                if showingHidden {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(L("hidden.empty")).fontWeight(.medium)
+                    }
+                    .padding(16)
+                } else if FileManager.default.fileExists(atPath: SessionStore.defaultRoot.path) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(L("state.noSessions")).fontWeight(.medium)
                         Text(L("state.noSessionsDetail"))
@@ -320,12 +343,23 @@ struct MenuBarView: View {
             }
             Divider()
             HStack {
+                if showingHidden {
+                    Button(L("hidden.back")) {
+                        withAnimation(.easeInOut(duration: 0.15)) { showingHidden = false }
+                    }
+                } else if !hiddenIds.isEmpty {
+                    Button(L("hidden.show %d", hiddenIds.count)) {
+                        withAnimation(.easeInOut(duration: 0.15)) { showingHidden = true }
+                    }
+                }
+                Spacer()
                 Button(L("action.refresh")) {
                     Task {
                         await store.refreshAsync()
                         updateMissingPaths()
                         updateLiveSessions()
                         updatePendingMoves()
+                        updateHidden()
                     }
                 }
                 Spacer()
@@ -371,6 +405,7 @@ struct MenuBarView: View {
         do {
             try remover.remove(session)
             registry.forget(session.id)
+            hides.reveal(session.id)
         } catch {
             setNotice(L("notice.deleteFailed", error.localizedDescription))
             return
@@ -385,6 +420,24 @@ struct MenuBarView: View {
     private func updateLiveSessions() {
         let ids = store.projects.flatMap(\.sessions).map(\.id)
         liveSessions = Set(ids.filter { registry.isLive($0) })
+    }
+
+    /// 숨김 상태를 다시 읽는다. 사라진 세션의 기록은 여기서 정리된다.
+    private func updateHidden() {
+        let sessions = store.projects.flatMap(\.sessions)
+        hides.reconcile(sessions)
+        hiddenIds = hides.hidden()
+        if showingHidden && hiddenIds.isEmpty { showingHidden = false }
+    }
+
+    /// 모드에 따라 보여줄 그룹. 세션이 하나도 안 남는 그룹은 빠진다.
+    private var visibleProjects: [Project] {
+        store.projects.compactMap { project in
+            let sessions = project.sessions.filter {
+                showingHidden ? hiddenIds.contains($0.id) : !hiddenIds.contains($0.id)
+            }
+            return sessions.isEmpty ? nil : Project(path: project.path, sessions: sessions)
+        }
     }
 
     private func scheduleMove(_ session: Session, to path: String) {

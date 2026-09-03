@@ -29,3 +29,8 @@
 "move.chooseFolder" = "Other Folder…";
 "move.chooseFolderPrompt" = "Choose the folder to move this session to";
 "move.notADirectory" = "That is not a folder";
+"action.hide" = "Hide";
+"action.reveal" = "Unhide";
+"hidden.show %d" = "Show hidden (%d)";
+"hidden.back" = "Back to sessions";
+"hidden.empty" = "Nothing hidden";

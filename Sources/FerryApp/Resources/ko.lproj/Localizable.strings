@@ -29,3 +29,8 @@
 "move.chooseFolder" = "다른 폴더…";
 "move.chooseFolderPrompt" = "이 세션을 옮길 폴더를 고르세요";
 "move.notADirectory" = "폴더가 아닙니다";
+"action.hide" = "숨기기";
+"action.reveal" = "숨김 해제";
+"hidden.show %d" = "숨긴 세션 (%d)";
+"hidden.back" = "목록으로";
+"hidden.empty" = "숨긴 세션이 없습니다";
