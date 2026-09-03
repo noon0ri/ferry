@@ -342,17 +342,9 @@ struct MenuBarView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             Divider()
-            HStack {
-                if showingHidden {
-                    Button(L("hidden.back")) {
-                        withAnimation(.easeInOut(duration: 0.15)) { showingHidden = false }
-                    }
-                } else if !hiddenIds.isEmpty {
-                    Button(L("hidden.show %d", hiddenIds.count)) {
-                        withAnimation(.easeInOut(duration: 0.15)) { showingHidden = true }
-                    }
-                }
-                Spacer()
+            // 새로고침은 항상 왼쪽 끝, 종료는 항상 오른쪽 끝에 고정한다.
+            // 숨김 버튼은 있을 때만 새로고침 옆에 붙으므로, 없어도 나머지가 움직이지 않는다.
+            HStack(spacing: 12) {
                 Button(L("action.refresh")) {
                     Task {
                         await store.refreshAsync()
@@ -360,6 +352,15 @@ struct MenuBarView: View {
                         updateLiveSessions()
                         updatePendingMoves()
                         updateHidden()
+                    }
+                }
+                if showingHidden {
+                    Button(L("hidden.back")) {
+                        withAnimation(.easeInOut(duration: 0.15)) { showingHidden = false }
+                    }
+                } else if !hiddenIds.isEmpty {
+                    Button(L("hidden.show %d", hiddenIds.count)) {
+                        withAnimation(.easeInOut(duration: 0.15)) { showingHidden = true }
                     }
                 }
                 Spacer()
