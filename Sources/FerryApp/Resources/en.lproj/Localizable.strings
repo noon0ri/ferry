@@ -34,3 +34,6 @@
 "hidden.show %d" = "Show hidden (%d)";
 "hidden.back" = "Back to sessions";
 "hidden.empty" = "Nothing hidden";
+"action.favorite" = "Add to Favorites";
+"action.unfavorite" = "Remove from Favorites";
+"favorites.title" = "Favorites";

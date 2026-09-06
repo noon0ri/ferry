@@ -26,6 +26,8 @@ struct MenuBarView: View {
     @State private var hiddenIds: Set<String> = []
     /// 숨긴 세션을 되돌아보는 모드. 삭제는 여기서만 꺼낼 수 있다.
     @State private var showingHidden = false
+    @State private var favoriteIds: Set<String> = []
+    @State private var favoritesExpanded = true
     @State private var loadState: LoadState = .loading
     @State private var pendingDelete: Session?
     @State private var pendingRename: Session?
@@ -40,6 +42,7 @@ struct MenuBarView: View {
     private let registry = SessionTerminalRegistry()
     private var moves: SessionMoveRegistry { MenuBarView.moveRegistry }
     private let hides = SessionHideRegistry()
+    private let favorites = SessionFavoriteRegistry()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -67,6 +70,7 @@ struct MenuBarView: View {
                 updateLiveSessions()
                 updatePendingMoves()
                 updateHidden()
+                updateFavorites()
                 applyInitialExpansion()
                 loadState = .loaded
                 clearStaleNotice()
@@ -78,59 +82,34 @@ struct MenuBarView: View {
     private var list: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 2) {
+                // 자주 돌아가는 세션은 그룹을 펼치지 않고 바로 닿아야 한다.
+                // 원래 그룹에도 그대로 남는다 — Finder 사이드바나 북마크와 같은 방식.
+                if !showingHidden && !favoriteSessions.isEmpty {
+                    DisclosureGroup(isExpanded: $favoritesExpanded) {
+                        // 섹션 자체가 즐겨찾기임을 말하므로 행마다 별표를 붙이지 않는다.
+                        ForEach(favoriteSessions) { sessionRow($0, showFavoriteMark: false) }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "star.fill")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Text(L("favorites.title")).fontWeight(.medium)
+                            Text("(\(favoriteSessions.count))")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.easeInOut(duration: 0.15)) { favoritesExpanded.toggle() }
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    Divider().padding(.horizontal, 12).padding(.vertical, 2)
+                }
+
                 ForEach(visibleProjects) { project in
                     DisclosureGroup(isExpanded: binding(for: project)) {
-                        ForEach(project.sessions) { session in
-                            SessionRow(session: session,
-                                       exists: !missingPaths.contains(session.cwd),
-                                       hasTerminal: liveSessions.contains(session.id),
-                                       movingTo: pendingMoves[session.id],
-                                       memoryCount: ProjectMemory.fileCount(for: session)) { open(session) }
-                                .contextMenu {
-                                    if showingHidden {
-                                        // 숨긴 것을 되돌아보는 자리. 삭제는 여기서만 나온다.
-                                        Button(L("action.reveal")) {
-                                            hides.reveal(session.id)
-                                            updateHidden()
-                                        }
-                                        Divider()
-                                        Button(L("action.deleteSession"), role: .destructive) {
-                                            withAnimation(.spring(response: 0.3, dampingFraction: 1)) {
-                                                pendingRename = nil
-                                                pendingDelete = session
-                                            }
-                                        }
-                                    } else {
-                                    Menu(L("action.moveTo")) {
-                                        ForEach(store.projects.filter { $0.path != session.cwd }) { other in
-                                            Button(other.name) { scheduleMove(session, to: other.path) }
-                                        }
-                                        // Ferry는 이미 세션이 있는 폴더만 안다. 아직 세션이 없는
-                                        // 폴더로는 목록만으로 옮길 수 없으므로 직접 고르게 한다.
-                                        Divider()
-                                        Button(L("move.chooseFolder")) { chooseFolder(for: session) }
-                                    }
-                                    if pendingMoves[session.id] != nil {
-                                        Button(L("move.cancel")) {
-                                            moves.cancel(session.id)
-                                            updatePendingMoves()
-                                        }
-                                    }
-                                    Divider()
-                                    Button(L("action.renameSession")) {
-                                        renameText = session.title
-                                        withAnimation(.spring(response: 0.3, dampingFraction: 1)) {
-                                            pendingDelete = nil
-                                            pendingRename = session
-                                        }
-                                    }
-                                    Button(L("action.hide")) {
-                                        hides.hide(session.id)
-                                        updateHidden()
-                                    }
-                                    }
-                                }
-                        }
+                        ForEach(project.sessions) { sessionRow($0) }
                     } label: {
                         HStack(spacing: 4) {
                             HStack(spacing: 4) {
@@ -180,6 +159,68 @@ struct MenuBarView: View {
         .frame(height: listHeight)
     }
 
+    /// 세션 행 하나. 즐겨찾기 섹션과 그룹 양쪽에서 같은 것을 쓴다.
+    @ViewBuilder
+    private func sessionRow(_ session: Session, showFavoriteMark: Bool = true) -> some View {
+        SessionRow(session: session,
+                   exists: !missingPaths.contains(session.cwd),
+                   hasTerminal: liveSessions.contains(session.id),
+                   movingTo: pendingMoves[session.id],
+                   isFavorite: showFavoriteMark && favoriteIds.contains(session.id),
+                   memoryCount: ProjectMemory.fileCount(for: session)) { open(session) }
+            .contextMenu {
+                if showingHidden {
+                    // 숨긴 것을 되돌아보는 자리. 삭제는 여기서만 나온다.
+                    Button(L("action.reveal")) {
+                        hides.reveal(session.id)
+            favorites.remove(session.id)
+                        updateHidden()
+                        updateFavorites()
+                    }
+                    Divider()
+                    Button(L("action.deleteSession"), role: .destructive) {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 1)) {
+                            pendingRename = nil
+                            pendingDelete = session
+                        }
+                    }
+                } else {
+                    Button(favoriteIds.contains(session.id)
+                           ? L("action.unfavorite") : L("action.favorite")) {
+                        favorites.toggle(session.id)
+                        withAnimation(.easeInOut(duration: 0.15)) { updateFavorites() }
+                    }
+                    Menu(L("action.moveTo")) {
+                        ForEach(store.projects.filter { $0.path != session.cwd }) { other in
+                            Button(other.name) { scheduleMove(session, to: other.path) }
+                        }
+                        // Ferry는 이미 세션이 있는 폴더만 안다. 아직 세션이 없는
+                        // 폴더로는 목록만으로 옮길 수 없으므로 직접 고르게 한다.
+                        Divider()
+                        Button(L("move.chooseFolder")) { chooseFolder(for: session) }
+                    }
+                    if pendingMoves[session.id] != nil {
+                        Button(L("move.cancel")) {
+                            moves.cancel(session.id)
+                            updatePendingMoves()
+                        }
+                    }
+                    Divider()
+                    Button(L("action.renameSession")) {
+                        renameText = session.title
+                        withAnimation(.spring(response: 0.3, dampingFraction: 1)) {
+                            pendingDelete = nil
+                            pendingRename = session
+                        }
+                    }
+                    Button(L("action.hide")) {
+                        hides.hide(session.id)
+                        updateHidden()
+                    }
+                }
+            }
+    }
+
     /// ScrollView는 세로 방향 고유 크기가 없다. maxHeight만 주면 "이만큼까지 허용"일 뿐
     /// "이만큼 달라"가 아니어서, 콘텐츠에 맞춰 크기가 정해지는 MenuBarExtra 창 안에서는
     /// 최소 크기로 쪼그라든다(행 텍스트가 세로로 잘리는 증상). 그래서 높이를 계산해 명시한다.
@@ -187,6 +228,10 @@ struct MenuBarView: View {
     /// 펼쳐진 그룹만큼 늘어나고, 화면 높이를 넘지 않는다.
     private var listHeight: CGFloat {
         var needed: CGFloat = 16                       // LazyVStack 위아래 여백
+        if !showingHidden && !favoriteSessions.isEmpty {
+            needed += 26 + 9                           // 섹션 헤더 + 구분선
+            if favoritesExpanded { needed += CGFloat(favoriteSessions.count) * 39 }
+        }
         for project in visibleProjects {
             needed += 26                               // 그룹 헤더 한 줄
             if expanded.contains(project.id) {
@@ -431,6 +476,20 @@ struct MenuBarView: View {
         if showingHidden && hiddenIds.isEmpty { showingHidden = false }
     }
 
+    /// 즐겨찾기 상태를 다시 읽는다. 사라진 세션의 기록은 여기서 정리된다.
+    private func updateFavorites() {
+        let sessions = store.projects.flatMap(\.sessions)
+        favorites.reconcile(sessions)
+        favoriteIds = favorites.favorites()
+    }
+
+    /// 즐겨찾기 섹션에 보여줄 세션. 숨긴 것은 빠지고, 최근 활동순이다.
+    private var favoriteSessions: [Session] {
+        store.projects.flatMap(\.sessions)
+            .filter { favoriteIds.contains($0.id) && !hiddenIds.contains($0.id) }
+            .sorted { $0.modifiedAt > $1.modifiedAt }
+    }
+
     /// 모드에 따라 보여줄 그룹. 세션이 하나도 안 남는 그룹은 빠진다.
     private var visibleProjects: [Project] {
         store.projects.compactMap { project in
@@ -554,6 +613,8 @@ private struct SessionRow: View {
     let hasTerminal: Bool
     /// 다음 재개 때 옮겨갈 폴더. 아직 옮겨지지 않았으므로 행은 원래 그룹에 남는다.
     let movingTo: String?
+    /// 즐겨찾기 여부. 그룹 안에서도 알아볼 수 있게 별표를 붙인다.
+    let isFavorite: Bool
     /// 이 프로젝트에 딸린 메모리 파일 수. 이동하면 따라가지 않으므로 툴팁에 밝힌다.
     let memoryCount: Int
     let action: () -> Void
@@ -568,8 +629,15 @@ private struct SessionRow: View {
                     .frame(width: 7, height: 7)
                     .help(hasTerminal ? L("dot.hasTerminal") : L("dot.noTerminal"))
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(session.title)
-                        .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Text(session.title)
+                            .lineLimit(1)
+                        if isFavorite {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 8))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     HStack(spacing: 4) {
                         Text(relativeTime)
                         if let branch = session.gitBranch {
