@@ -18,10 +18,15 @@ So you stop closing terminal windows. Even a session you return to once a week s
 - **If that session's Terminal window is already open, it is brought to the front instead of opening a new one**
 - The dot tells you which will happen: green means an open window to focus, grey means a new one
 - Hovering a group row reveals a `+` that **starts a new session** in that folder
-- Right-click to rename, **hide**, or **move to another group** (right-click a group for a new session)
+- **Favourited** sessions gather in a section pinned to the top of the list
+- Right-click to favourite, rename, hide, or move to another group (right-click a group for a new session)
 - The list refreshes every 3 seconds
 
 Renaming writes the same record format Claude Code itself uses, so the new name also appears in the `claude --resume` picker and the terminal title. The name does not live in two places.
+
+Sessions you keep returning to go in Favourites. They stay in their real group as well as
+appearing at the top — the same arrangement as the Finder sidebar. Inside a group they carry a
+small star.
 
 Clearing something out of the list is hiding: no files are touched and it is reversible at any time. The footer's *Show hidden* brings them back into view.
 
@@ -112,7 +117,7 @@ plutil -extract NSAppleEventsUsageDescription raw build/Ferry.app/Contents/Info.
 ## Development
 
 ```bash
-swift test      # 83 tests
+swift test      # 88 tests
 swift build
 ./Scripts/bundle.sh
 ```
