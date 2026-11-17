@@ -11,7 +11,9 @@ cd "$(dirname "$0")/.."
 # 다른 Mac에 그냥 복사해서 쓰는 것이 이 앱의 주된 배포 방식이라, 아키텍처를 가리면
 # 받는 쪽에서 "손상되었다"는 모호한 오류만 보게 된다.
 swift build -c release --arch arm64 --arch x86_64
-BUILD_DIR=".build/apple/Products/Release"
+# 출력 경로는 툴체인마다 다르다(.build/apple → .build/out). 하드코딩하면 옛 경로에 남은
+# 낡은 바이너리를 오류 없이 포장하므로 SwiftPM에 직접 묻는다.
+BUILD_DIR="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)"
 
 APP="build/${APP_NAME}.app"
 rm -rf "$APP"
