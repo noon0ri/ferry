@@ -37,3 +37,5 @@
 "action.favorite" = "즐겨찾기";
 "action.unfavorite" = "즐겨찾기 해제";
 "favorites.title" = "즐겨찾기";
+"search.placeholder" = "세션 검색";
+"search.noResults" = "일치하는 세션이 없습니다";

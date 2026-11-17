@@ -37,3 +37,5 @@
 "action.favorite" = "Add to Favorites";
 "action.unfavorite" = "Remove from Favorites";
 "favorites.title" = "Favorites";
+"search.placeholder" = "Search sessions";
+"search.noResults" = "No matching sessions";

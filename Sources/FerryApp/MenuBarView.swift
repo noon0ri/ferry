@@ -34,6 +34,11 @@ struct MenuBarView: View {
     @State private var hoveredProject: String?
     @State private var renameText: String = ""
     @FocusState private var renameFieldFocused: Bool
+    @State private var searchText = ""
+    @FocusState private var searchFieldFocused: Bool
+    /// ↑↓로 고른 행. 같은 세션이 즐겨찾기와 그룹 양쪽에 나오므로 세션 id가 아니라 행 키로 가리킨다.
+    @State private var selectedRow: String?
+    @State private var keyMonitor: Any?
 
     private let remover = SessionRemover()
     private let renamer = SessionRenamer()
@@ -46,6 +51,7 @@ struct MenuBarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            searchField
             if visibleProjects.isEmpty {
                 emptyState
             } else {
@@ -60,6 +66,18 @@ struct MenuBarView: View {
             }
         }
         .frame(width: 320)
+        .onAppear {
+            installKeyMonitor()
+            searchFieldFocused = true
+        }
+        // 뷰는 팝오버를 닫아도 남으므로 onAppear는 다시 열 때 돌지 않는다.
+        // 창의 키 상태로 열고 닫힘을 안다 — 닫히면 검색을 비우고, 열리면 바로 타이핑할 수 있게 한다.
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in
+            resetSearch()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            if pendingRename == nil { searchFieldFocused = true }
+        }
         .task {
             // .task는 뷰 생명주기당 한 번만 돈다. MenuBarExtra(.window)는 팝오버를
             // 닫아도 뷰를 버리지 않으므로, 한 번만 스캔하면 목록이 그대로 굳는다.
@@ -79,95 +97,124 @@ struct MenuBarView: View {
         }
     }
 
-    private var list: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 2) {
-                // 자주 돌아가는 세션은 그룹을 펼치지 않고 바로 닿아야 한다.
-                // 원래 그룹에도 그대로 남는다 — Finder 사이드바나 북마크와 같은 방식.
-                if !showingHidden && !favoriteSessions.isEmpty {
-                    DisclosureGroup(isExpanded: $favoritesExpanded) {
-                        // 섹션 자체가 즐겨찾기임을 말하므로 행마다 별표를 붙이지 않는다.
-                        ForEach(favoriteSessions) { sessionRow($0, showFavoriteMark: false) }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "star.fill")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                            Text(L("favorites.title")).fontWeight(.medium)
-                            Text("(\(favoriteSessions.count))")
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            withAnimation(.easeInOut(duration: 0.15)) { favoritesExpanded.toggle() }
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    Divider().padding(.horizontal, 12).padding(.vertical, 2)
-                }
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField(L("search.placeholder"), text: $searchText)
+                .textFieldStyle(.plain)
+                .focused($searchFieldFocused)
+                .onSubmit(openSelectedRow)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .overlay(alignment: .bottom) { Divider() }
+        .onChange(of: searchText) {
+            // 타이핑하고 바로 Enter로 갈 수 있게 첫 결과를 고른다.
+            selectedRow = isSearching ? navigableRows.first?.key : nil
+        }
+    }
 
-                ForEach(visibleProjects) { project in
-                    DisclosureGroup(isExpanded: binding(for: project)) {
-                        ForEach(project.sessions) { sessionRow($0) }
-                    } label: {
-                        HStack(spacing: 4) {
+    private var list: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 2) {
+                    // 자주 돌아가는 세션은 그룹을 펼치지 않고 바로 닿아야 한다.
+                    // 원래 그룹에도 그대로 남는다 — Finder 사이드바나 북마크와 같은 방식.
+                    if !showingHidden && !favoriteSessions.isEmpty {
+                        DisclosureGroup(isExpanded: Binding(
+                            get: { favoritesShown },
+                            set: { favoritesExpanded = $0 }
+                        )) {
+                            ForEach(favoriteSessions) { sessionRow($0, inFavorites: true) }
+                        } label: {
                             HStack(spacing: 4) {
-                                Text(project.name).fontWeight(.medium)
-                                Text("(\(project.sessions.count))")
+                                Image(systemName: "star.fill")
+                                    .font(.caption2)
                                     .foregroundStyle(.secondary)
-                                Spacer()   // 이름 오른쪽 빈 공간까지 접기 영역
+                                Text(L("favorites.title")).fontWeight(.medium)
+                                Text("(\(favoriteSessions.count))")
+                                    .foregroundStyle(.secondary)
+                                Spacer()
                             }
                             .contentShape(Rectangle())
                             .onTapGesture {
-                                withAnimation(.easeInOut(duration: 0.15)) {
-                                    binding(for: project).wrappedValue.toggle()
-                                }
+                                withAnimation(.easeInOut(duration: 0.15)) { favoritesExpanded.toggle() }
                             }
-                            // 버튼을 Spacer 뒤에 두고 탭 제스처는 앞쪽 HStack에만 건다.
-                            // 라벨 전체에 제스처를 걸면 + 클릭이 접기/펼치기까지 발동시킨다.
-                            //
-                            // 호버할 때 버튼을 끼워 넣으면 그때마다 이름이 밀린다.
-                            // 자리는 항상 차지하게 두고 보이기만 바꾼다.
-                            Button {
-                                newSession(in: project)
-                            } label: {
-                                Image(systemName: "plus")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .padding(.horizontal, 4)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .help(L("action.newSession"))
-                            .opacity(hoveredProject == project.id ? 1 : 0)
-                            .allowsHitTesting(hoveredProject == project.id)
                         }
-                        .contentShape(Rectangle())   // 빈 공간도 히트 테스트 대상
-                        .onHover { inside in
-                            hoveredProject = inside ? project.id : nil
-                        }
-                        .contextMenu {
-                            Button(L("action.newSession")) { newSession(in: project) }
-                        }
+                        .padding(.horizontal, 12)
+                        Divider().padding(.horizontal, 12).padding(.vertical, 2)
                     }
-                    .padding(.horizontal, 12)
+
+                    ForEach(visibleProjects) { project in
+                        DisclosureGroup(isExpanded: binding(for: project)) {
+                            ForEach(project.sessions) { sessionRow($0, inFavorites: false) }
+                        } label: {
+                            HStack(spacing: 4) {
+                                HStack(spacing: 4) {
+                                    Text(project.name).fontWeight(.medium)
+                                    Text("(\(project.sessions.count))")
+                                        .foregroundStyle(.secondary)
+                                    Spacer()   // 이름 오른쪽 빈 공간까지 접기 영역
+                                }
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    withAnimation(.easeInOut(duration: 0.15)) {
+                                        binding(for: project).wrappedValue.toggle()
+                                    }
+                                }
+                                // 버튼을 Spacer 뒤에 두고 탭 제스처는 앞쪽 HStack에만 건다.
+                                // 라벨 전체에 제스처를 걸면 + 클릭이 접기/펼치기까지 발동시킨다.
+                                //
+                                // 호버할 때 버튼을 끼워 넣으면 그때마다 이름이 밀린다.
+                                // 자리는 항상 차지하게 두고 보이기만 바꾼다.
+                                Button {
+                                    newSession(in: project)
+                                } label: {
+                                    Image(systemName: "plus")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .padding(.horizontal, 4)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .help(L("action.newSession"))
+                                .opacity(hoveredProject == project.id ? 1 : 0)
+                                .allowsHitTesting(hoveredProject == project.id)
+                            }
+                            .contentShape(Rectangle())   // 빈 공간도 히트 테스트 대상
+                            .onHover { inside in
+                                hoveredProject = inside ? project.id : nil
+                            }
+                            .contextMenu {
+                                Button(L("action.newSession")) { newSession(in: project) }
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                    }
                 }
+                .padding(.vertical, 8)
             }
-            .padding(.vertical, 8)
+            .frame(height: listHeight)
+            .onChange(of: selectedRow) {
+                if let selectedRow { proxy.scrollTo(selectedRow) }
+            }
         }
-        .frame(height: listHeight)
     }
 
     /// 세션 행 하나. 즐겨찾기 섹션과 그룹 양쪽에서 같은 것을 쓴다.
     @ViewBuilder
-    private func sessionRow(_ session: Session, showFavoriteMark: Bool = true) -> some View {
+    private func sessionRow(_ session: Session, inFavorites: Bool) -> some View {
+        let key = rowKey(session, inFavorites: inFavorites)
         SessionRow(session: session,
                    exists: !missingPaths.contains(session.cwd),
                    hasTerminal: liveSessions.contains(session.id),
                    movingTo: pendingMoves[session.id],
-                   isFavorite: showFavoriteMark && favoriteIds.contains(session.id),
+                   // 즐겨찾기 섹션 안에서는 섹션 자체가 그것을 말하므로 별표를 붙이지 않는다.
+                   isFavorite: !inFavorites && favoriteIds.contains(session.id),
+                   isSelected: selectedRow == key,
                    memoryCount: ProjectMemory.fileCount(for: session)) { open(session) }
+            .id(key)
             .contextMenu {
                 if showingHidden {
                     // 숨긴 것을 되돌아보는 자리. 삭제는 여기서만 나온다.
@@ -230,15 +277,15 @@ struct MenuBarView: View {
         var needed: CGFloat = 16                       // LazyVStack 위아래 여백
         if !showingHidden && !favoriteSessions.isEmpty {
             needed += 26 + 9                           // 섹션 헤더 + 구분선
-            if favoritesExpanded { needed += CGFloat(favoriteSessions.count) * 39 }
+            if favoritesShown { needed += CGFloat(favoriteSessions.count) * 39 }
         }
         for project in visibleProjects {
             needed += 26                               // 그룹 헤더 한 줄
-            if expanded.contains(project.id) {
+            if isExpanded(project) {
                 needed += CGFloat(project.sessions.count) * 39   // 세션 행(2줄)
             }
         }
-        var screenCap = (NSScreen.main?.visibleFrame.height ?? 800) - 140
+        var screenCap = (NSScreen.main?.visibleFrame.height ?? 800) - 140 - 36   // 36: 검색창
         if pendingDelete != nil { screenCap -= 160 }   // 확인 영역이 차지하는 만큼
         if pendingRename != nil { screenCap -= 160 }
         return min(max(needed, 160), min(900, screenCap))
@@ -255,7 +302,12 @@ struct MenuBarView: View {
                 }
                 .padding(16)
             case .loaded:
-                if showingHidden {
+                if isSearching {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(L("search.noResults")).fontWeight(.medium)
+                    }
+                    .padding(16)
+                } else if showingHidden {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(L("hidden.empty")).fontWeight(.medium)
                     }
@@ -334,6 +386,7 @@ struct MenuBarView: View {
             pendingDelete = nil
             pendingRename = nil
         }
+        searchFieldFocused = true
     }
 
     private func confirmRename(_ session: Session) {
@@ -419,7 +472,7 @@ struct MenuBarView: View {
 
     private func binding(for project: Project) -> Binding<Bool> {
         Binding(
-            get: { expanded.contains(project.id) },
+            get: { isExpanded(project) },
             set: { isOn in
                 if isOn { expanded.insert(project.id) } else { expanded.remove(project.id) }
             }
@@ -483,20 +536,96 @@ struct MenuBarView: View {
         favoriteIds = favorites.favorites()
     }
 
-    /// 즐겨찾기 섹션에 보여줄 세션. 숨긴 것은 빠지고, 최근 활동순이다.
+    /// 즐겨찾기 섹션에 보여줄 세션. 숨긴 것은 빠지고, 검색 필터를 거치고, 최근 활동순이다.
     private var favoriteSessions: [Session] {
-        store.projects.flatMap(\.sessions)
+        visibleProjects.flatMap(\.sessions)
             .filter { favoriteIds.contains($0.id) && !hiddenIds.contains($0.id) }
             .sorted { $0.modifiedAt > $1.modifiedAt }
     }
 
-    /// 모드에 따라 보여줄 그룹. 세션이 하나도 안 남는 그룹은 빠진다.
+    /// 모드와 검색어에 따라 보여줄 그룹. 세션이 하나도 안 남는 그룹은 빠진다.
     private var visibleProjects: [Project] {
-        store.projects.compactMap { project in
+        let byMode: [Project] = store.projects.compactMap { project in
             let sessions = project.sessions.filter {
                 showingHidden ? hiddenIds.contains($0.id) : !hiddenIds.contains($0.id)
             }
             return sessions.isEmpty ? nil : Project(path: project.path, sessions: sessions)
+        }
+        return SessionSearch.filter(byMode, query: searchText)
+    }
+
+    private var isSearching: Bool {
+        !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// 검색 중에는 맞는 그룹이 모두 펼쳐진다. 사용자가 고른 펼침 상태는 건드리지 않으므로
+    /// 검색을 지우면 원래대로 돌아간다.
+    private func isExpanded(_ project: Project) -> Bool {
+        isSearching || expanded.contains(project.id)
+    }
+
+    private var favoritesShown: Bool { isSearching || favoritesExpanded }
+
+    private func rowKey(_ session: Session, inFavorites: Bool) -> String {
+        (inFavorites ? "favorite:" : "group:") + session.id
+    }
+
+    /// 화면에 보이는 순서대로의 세션 행. ↑↓는 이 순서를 따른다.
+    private var navigableRows: [(key: String, session: Session)] {
+        var rows: [(key: String, session: Session)] = []
+        if !showingHidden && favoritesShown {
+            rows += favoriteSessions.map { (rowKey($0, inFavorites: true), $0) }
+        }
+        for project in visibleProjects where isExpanded(project) {
+            rows += project.sessions.map { (rowKey($0, inFavorites: false), $0) }
+        }
+        return rows
+    }
+
+    private func moveSelection(by step: Int) {
+        let keys = navigableRows.map(\.key)
+        guard !keys.isEmpty else { return }
+        if let current = selectedRow, let index = keys.firstIndex(of: current) {
+            selectedRow = keys[min(max(index + step, 0), keys.count - 1)]
+        } else {
+            selectedRow = step > 0 ? keys.first : keys.last
+        }
+    }
+
+    private func openSelectedRow() {
+        guard let key = selectedRow,
+              let row = navigableRows.first(where: { $0.key == key }) else { return }
+        open(row.session)
+    }
+
+    private func resetSearch() {
+        searchText = ""
+        selectedRow = nil
+    }
+
+    /// 검색창에 포커스가 있는 채로 ↑↓와 Esc를 목록 조작에 쓴다. 이 키들은 TextField의
+    /// 필드 에디터가 먼저 처리하므로 SwiftUI 키 처리 대신 앱 이벤트 모니터로 가로챈다.
+    private func installKeyMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            handleKey(event) ? nil : event
+        }
+    }
+
+    private func handleKey(_ event: NSEvent) -> Bool {
+        guard pendingRename == nil, pendingDelete == nil,
+              !(event.window is NSSavePanel),   // 폴더 선택 창의 키는 건드리지 않는다
+              event.modifierFlags.intersection([.command, .option, .control]).isEmpty
+        else { return false }
+        // 한글 조합 중에는 화살표가 조합을 끝내는 데 쓰인다. 가로채면 글자가 조합 상태로 남는다.
+        if let editor = event.window?.firstResponder as? NSTextView, editor.hasMarkedText() {
+            return false
+        }
+        switch event.keyCode {
+        case 125: moveSelection(by: 1); return true    // ↓
+        case 126: moveSelection(by: -1); return true   // ↑
+        case 53 where !searchText.isEmpty: resetSearch(); return true   // Esc
+        default: return false
         }
     }
 
@@ -615,6 +744,8 @@ private struct SessionRow: View {
     let movingTo: String?
     /// 즐겨찾기 여부. 그룹 안에서도 알아볼 수 있게 별표를 붙인다.
     let isFavorite: Bool
+    /// 키보드(↑↓)로 고른 행인가. Enter가 이 행을 연다.
+    let isSelected: Bool
     /// 이 프로젝트에 딸린 메모리 파일 수. 이동하면 따라가지 않으므로 툴팁에 밝힌다.
     let memoryCount: Int
     let action: () -> Void
@@ -660,6 +791,8 @@ private struct SessionRow: View {
             .contentShape(Rectangle())
             .padding(.vertical, 3)
             .padding(.leading, 4)
+            .background(RoundedRectangle(cornerRadius: 5)
+                .fill(isSelected ? Color.accentColor.opacity(0.2) : .clear))
         }
         .buttonStyle(.plain)
         .opacity(exists ? 1 : 0.45)
