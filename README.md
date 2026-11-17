@@ -20,7 +20,9 @@ So you stop closing terminal windows. Even a session you return to once a week s
 - Hovering a group row reveals a `+` that **starts a new session** in that folder
 - **Favourited** sessions gather in a section pinned to the top of the list
 - Type part of a title, folder name or branch into the **search field** at the top to filter. ↑↓ to pick, Enter to open
-- **⌃⌥Space** opens and closes the popover from anywhere — shortcut, type, Enter, no mouse
+- **⌃⌥Space** opens and closes the popover from anywhere — shortcut, type, Enter, no mouse.
+  ↑↓ also stops on group headers, where Enter expands or collapses
+- Sessions Claude Code is about to delete show **"· deleted in Nd"**
 - Right-click to favourite, rename, hide, or move to another group (right-click a group for a new session)
 - The list refreshes every 3 seconds
 
@@ -33,6 +35,11 @@ small star.
 The search field takes input as soon as the popover opens. Every space-separated word must
 match, case-insensitively. Matching groups expand on their own, and closing the popover or pressing
 Esc clears the search. Conversation content is not searched.
+
+Claude Code deletes session logs left unused for `cleanupPeriodDays` (30 by default), with no
+per-session exemption. Ferry shows the days left from a week before. Resuming a session and sending a
+message restarts the clock; to keep everything, set a large `"cleanupPeriodDays"` in
+`~/.claude/settings.json`.
 
 Clearing something out of the list is hiding: no files are touched and it is reversible at any time. The footer's *Show hidden* brings them back into view.
 
@@ -123,7 +130,7 @@ plutil -extract NSAppleEventsUsageDescription raw build/Ferry.app/Contents/Info.
 ## Development
 
 ```bash
-swift test      # 96 tests
+swift test      # 102 tests
 swift build
 ./Scripts/bundle.sh
 ```
