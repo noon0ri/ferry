@@ -20,6 +20,7 @@ So you stop closing terminal windows. Even a session you return to once a week s
 - Hovering a group row reveals a `+` that **starts a new session** in that folder
 - **Favourited** sessions gather in a section pinned to the top of the list
 - Type part of a title, folder name or branch into the **search field** at the top to filter. ↑↓ to pick, Enter to open
+- **⌃⌥Space** opens and closes the popover from anywhere — shortcut, type, Enter, no mouse
 - Right-click to favourite, rename, hide, or move to another group (right-click a group for a new session)
 - The list refreshes every 3 seconds
 

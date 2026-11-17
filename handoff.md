@@ -4,8 +4,8 @@
 **무엇이 어긋났고 어떻게 알았는지**를 남긴다. 결과만 보면 이해되지 않을 결정들이 있다.
 
 - 저장소: https://github.com/noon0ri/ferry (MIT, public)
-- 최신 릴리스: v0.1.7
-- 커밋 56개 · 테스트 96개
+- 최신 릴리스: v0.1.8
+- 커밋 58개 · 테스트 96개
 - 앱 설명은 [README.md](README.md) / [README.ko.md](README.ko.md)
 - 고치지 않기로 한 것들은 [docs/known-issues.md](docs/known-issues.md)
 
@@ -117,6 +117,7 @@ Sources/FerryCore/            UI를 모른다. 전부 테스트됨
 
 Sources/FerryApp/             메뉴바 UI
   FerryApp.swift              MenuBarExtra 진입점
+  GlobalHotKey.swift          ⌃⌥Space로 팝오버 열기 (Carbon 핫키)
   MenuBarView.swift           팝오버 전체
 
 Scripts/
@@ -569,7 +570,40 @@ Finder 사이드바나 브라우저 북마크가 같은 방식이라 혼란을 �
 
 ---
 
-## 12. 배포
+## 12. 전역 단축키 — macOS 27이 바꾼 것
+
+스펙 §3 "2차" 목록(검색, 핀 고정, 전역 단축키)의 마지막이다. 검색이 생기면서 값이 커졌다 —
+⌃⌥Space → 제목 일부 → Enter로 마우스 없이 세션에 닿는다. ⌥Space는 설치된 ChatGPT·Claude 앱과
+겹칠 수 있어 피했다. 설정 화면은 없다.
+
+**등록은 Carbon `RegisterEventHotKey`.** 손쉬운 사용 권한이 필요 없다. `NSEvent` 전역 모니터는
+그 권한을 요구한다.
+
+**여는 쪽이 어려웠다.** `MenuBarExtra`에는 팝오버를 코드로 여는 API가 없다. 순서대로 시도했다.
+
+| 시도 | 결과 | 알게 된 것 |
+|---|---|---|
+| `NSStatusBarButton.performClick` | 안 열림 | 로그상 핫키 수신·버튼 찾기 모두 정상 |
+| 화면 위 버튼만 고르기 | 안 열림 | 메뉴바 버튼 창이 여러 개고 일부는 화면 밖 `(0,-38)` 복제본이다 |
+| 마우스 누름/뗌 이벤트 합성 | 안 열림 | 버튼의 `target`·`action`이 `nil`이다 |
+| 비공개 `_requestExpandedInterfaceSession` | **열림** | |
+
+MenuBarExtraAccess(이 문제를 푸는 오픈소스) 소스에서 답을 찾았다. **macOS 27부터 메뉴바 항목은
+"expanded interface session"으로 열리고, 버튼 클릭 흉내는 더 이상 통하지 않는다.** SDK 헤더를
+보면 닫는 쪽(`expandedInterfaceSession.cancel()`)은 공개지만 여는 쪽은 없다. 런타임에서
+`NSStatusItem`의 메서드를 나열해 `_requestExpandedInterfaceSession`을 찾았고,
+`NSStatusBarWindow.statusItem`으로 항목에 닿는다.
+
+비공개 API를 쓰기로 사용자와 정했다. 개인 도구이고 앱스토어 배포가 아니다. 깨지면(macOS 업데이트)
+크래시 없이 단축키만 조용히 동작하지 않도록 `responds(to:)`로 막았다. macOS 26 이하는 원래의
+`performClick` 경로를 탄다(MenuBarExtraAccess가 그렇게 한다). 그쪽은 실기기로 확인하지 못했다.
+
+이번 조사도 계측이 갈랐다. "안 보인다"만으로는 핫키·버튼·클릭 중 어디가 끊겼는지 알 수 없었고,
+단계별 로그로 "클릭은 갔는데 창이 한 번도 안 뜬다"까지 좁힌 뒤에야 OS 쪽 변화를 의심할 수 있었다.
+
+---
+
+## 13. 배포
 
 **유니버설 바이너리.** 처음엔 arm64 전용이었다. 다른 Mac에 복사해 쓰는 것이 주된 배포
 방식인데, Intel Mac에서는 "손상되었다"는 모호한 오류만 보게 된다.
@@ -592,7 +626,7 @@ macOS는 식별자로 앱을 구분하므로 자동화 권한이 초기화된다
 
 ---
 
-## 13. 릴리스 이력
+## 14. 릴리스 이력
 
 | 버전 | 내용 |
 |---|---|
@@ -603,11 +637,12 @@ macOS는 식별자로 앱을 구분하므로 자동화 권한이 초기화된다
 | v0.1.4 | 세션을 다른 그룹으로 이동, 메모리 안내 |
 | v0.1.5 | 숨김 추가, 삭제는 숨긴 세션에서만 |
 | v0.1.6 | 즐겨찾기 |
-| v0.1.7 | 검색 |
+| v0.1.7 | 검색, 팝오버 높이 맞춤 |
+| v0.1.8 | 전역 단축키 ⌃⌥Space |
 
 ---
 
-## 14. 돌아왔을 때 확인할 것
+## 15. 돌아왔을 때 확인할 것
 
 **빌드**
 
@@ -646,6 +681,7 @@ README의 업데이트 절에 있다. 먼저 `pkill -x Ferry`로 종료해야 �
 - 점 색이 실제 터미널 상태를 따라가는지
 - 검색창 포커스, ↑↓/Enter/Esc, 한글 조합 중 필터와 화살표
 - 그룹을 펼치고 접을 때 창이 따라 늘고 줄며, 튀거나 반투명 잔상이 남지 않는지
+- ⌃⌥Space로 열고 닫히는지. macOS가 올라간 직후라면 가장 먼저 깨질 곳이다(비공개 API)
 
 **주의할 함정** (모두 실제로 한 번씩 당한 것들)
 
@@ -659,6 +695,7 @@ README의 업데이트 절에 있다. 먼저 `pkill -x Ferry`로 종료해야 �
 - `claude --resume`이 열려도 사용자가 첫 메시지를 보내기 전까지 로그에 새 `cwd`가 쓰이지 않는다
 - 자동 메모리는 프로젝트 디렉토리 단위라 세션을 옮겨도 따라가지 않는다
 - `KeyValueStore`로는 키를 열거할 수 없다. 정리가 필요한 기록은 집합 하나로 저장해야 한다
+- macOS 27부터 `MenuBarExtra`는 버튼 클릭 흉내(`performClick`, 합성 이벤트)로 열리지 않는다
 - `MenuBarExtra` 창은 작아지지 않는다. 직접 맞추면 그 뒤로는 커지지도 않는다(`WindowHeightFitter`)
 - 창 프레임 로그는 눈에 보이는 팝오버 크기와 다를 수 있다. UI 계측은 사용자가 보는 것으로 확인한다
 - 빌드 출력 경로는 툴체인마다 바뀐다. 하드코딩하면 낡은 바이너리를 조용히 포장한다
