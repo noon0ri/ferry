@@ -19,6 +19,7 @@ So you stop closing terminal windows. Even a session you return to once a week s
 - The dot tells you which will happen: green means an open window to focus, grey means a new one
 - Hovering a group row reveals a `+` that **starts a new session** in that folder
 - **Favourited** sessions gather in a section pinned to the top of the list
+- Type part of a title, folder name or branch into the **search field** at the top to filter. ↑↓ to pick, Enter to open
 - Right-click to favourite, rename, hide, or move to another group (right-click a group for a new session)
 - The list refreshes every 3 seconds
 
@@ -27,6 +28,10 @@ Renaming writes the same record format Claude Code itself uses, so the new name 
 Sessions you keep returning to go in Favourites. They stay in their real group as well as
 appearing at the top — the same arrangement as the Finder sidebar. Inside a group they carry a
 small star.
+
+The search field takes input as soon as the popover opens. Every space-separated word must
+match, case-insensitively. Matching groups expand on their own, and closing the popover or pressing
+Esc clears the search. Conversation content is not searched.
 
 Clearing something out of the list is hiding: no files are touched and it is reversible at any time. The footer's *Show hidden* brings them back into view.
 
@@ -117,7 +122,7 @@ plutil -extract NSAppleEventsUsageDescription raw build/Ferry.app/Contents/Info.
 ## Development
 
 ```bash
-swift test      # 88 tests
+swift test      # 96 tests
 swift build
 ./Scripts/bundle.sh
 ```

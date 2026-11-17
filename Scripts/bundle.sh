@@ -3,7 +3,7 @@ set -euo pipefail
 
 APP_NAME="Ferry"
 BUNDLE_ID="dev.noon0ri.ferry"
-VERSION="0.1.6"
+VERSION="0.1.7"
 
 cd "$(dirname "$0")/.."
 
