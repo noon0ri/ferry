@@ -151,6 +151,8 @@ struct MenuBarView: View {
                                 Spacer()
                             }
                             .contentShape(Rectangle())
+                            .background(selectionBackground(Self.favoritesHeaderKey))
+                            .id(Self.favoritesHeaderKey)
                             .onTapGesture {
                                 withAnimation(.easeInOut(duration: 0.15)) { favoritesExpanded.toggle() }
                             }
@@ -196,6 +198,8 @@ struct MenuBarView: View {
                                 .allowsHitTesting(hoveredProject == project.id)
                             }
                             .contentShape(Rectangle())   // 빈 공간도 히트 테스트 대상
+                            .background(selectionBackground(headerKey(project)))
+                            .id(headerKey(project))
                             .onHover { inside in
                                 hoveredProject = inside ? project.id : nil
                             }
@@ -587,14 +591,40 @@ struct MenuBarView: View {
         (inFavorites ? "favorite:" : "group:") + session.id
     }
 
-    /// 화면에 보이는 순서대로의 세션 행. ↑↓는 이 순서를 따른다.
-    private var navigableRows: [(key: String, session: Session)] {
-        var rows: [(key: String, session: Session)] = []
-        if !showingHidden && favoritesShown {
-            rows += favoriteSessions.map { (rowKey($0, inFavorites: true), $0) }
+    private static let favoritesHeaderKey = "favorites-header"
+
+    private func headerKey(_ project: Project) -> String { "group-header:" + project.id }
+
+    private func selectionBackground(_ key: String) -> some View {
+        RoundedRectangle(cornerRadius: 5)
+            .fill(selectedRow == key ? Color.accentColor.opacity(0.2) : .clear)
+    }
+
+    /// ↑↓로 지나가는 행 하나. 헤더에서 Enter는 펼치고 접고, 세션에서 Enter는 연다.
+    private enum NavRow {
+        case favoritesHeader
+        case header(Project)
+        case session(Session)
+    }
+
+    /// 화면에 보이는 순서대로의 행. ↑↓는 이 순서를 따른다.
+    ///
+    /// 접힌 그룹에도 키보드로 닿도록 헤더를 포함한다. 단 검색 중에는 그룹이 모두 펼쳐져 있어
+    /// 헤더가 할 일이 없고, 타이핑 후 Enter가 첫 결과를 열어야 하므로 세션만 지난다.
+    private var navigableRows: [(key: String, row: NavRow)] {
+        let headers = !isSearching
+        var rows: [(key: String, row: NavRow)] = []
+        if !showingHidden && !favoriteSessions.isEmpty {
+            if headers { rows.append((Self.favoritesHeaderKey, .favoritesHeader)) }
+            if favoritesShown {
+                rows += favoriteSessions.map { (rowKey($0, inFavorites: true), .session($0)) }
+            }
         }
-        for project in visibleProjects where isExpanded(project) {
-            rows += project.sessions.map { (rowKey($0, inFavorites: false), $0) }
+        for project in visibleProjects {
+            if headers { rows.append((headerKey(project), .header(project))) }
+            if isExpanded(project) {
+                rows += project.sessions.map { (rowKey($0, inFavorites: false), .session($0)) }
+            }
         }
         return rows
     }
@@ -611,8 +641,12 @@ struct MenuBarView: View {
 
     private func openSelectedRow() {
         guard let key = selectedRow,
-              let row = navigableRows.first(where: { $0.key == key }) else { return }
-        open(row.session)
+              let entry = navigableRows.first(where: { $0.key == key }) else { return }
+        switch entry.row {
+        case .favoritesHeader: favoritesExpanded.toggle()
+        case .header(let project): binding(for: project).wrappedValue.toggle()
+        case .session(let session): open(session)
+        }
     }
 
     private func resetSearch() {
