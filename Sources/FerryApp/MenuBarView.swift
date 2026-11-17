@@ -52,7 +52,7 @@ struct MenuBarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             searchField
-            if visibleProjects.isEmpty {
+            if visibleProjects.isEmpty && !isSearching {
                 emptyState
             } else {
                 list
@@ -66,6 +66,13 @@ struct MenuBarView: View {
             }
         }
         .frame(width: 320)
+        .background(GeometryReader { WindowHeightFitter(height: $0.size.height) })
+        // 창이 내용 높이를 따라잡기 전 한 박자 동안 SwiftUI는 내용을 세로 중앙에 둔다.
+        // 위아래로 튀어 보이므로 위쪽에 붙여, 그 사이에도 아래쪽만 바뀌게 한다.
+        .frame(maxHeight: .infinity, alignment: .top)
+        // 창은 높이가 바뀌는 즉시 맞춰진다(WindowHeightFitter). 그 안의 배치가 애니메이션되면
+        // 검색창과 푸터가 옛 자리에서 미끄러져 움찔거린다. 높이가 바뀔 때는 전부 한 번에 바꾼다.
+        .animation(nil, value: listHeight)
         .onAppear {
             installKeyMonitor()
             searchFieldFocused = true
@@ -119,6 +126,12 @@ struct MenuBarView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
+                    if visibleProjects.isEmpty {
+                        Text(L("search.noResults"))
+                            .fontWeight(.medium)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 4)
+                    }
                     // 자주 돌아가는 세션은 그룹을 펼치지 않고 바로 닿아야 한다.
                     // 원래 그룹에도 그대로 남는다 — Finder 사이드바나 북마크와 같은 방식.
                     if !showingHidden && !favoriteSessions.isEmpty {
@@ -273,15 +286,20 @@ struct MenuBarView: View {
     /// 최소 크기로 쪼그라든다(행 텍스트가 세로로 잘리는 증상). 그래서 높이를 계산해 명시한다.
     ///
     /// 펼쳐진 그룹만큼 늘어나고, 화면 높이를 넘지 않는다.
+    ///
+    /// 검색은 높이에 반영하지 않는다. 타이핑할 때마다 결과 수에 맞춰 창이 줄면 MenuBarExtra 창의
+    /// 위쪽이 제대로 다시 그려지지 않아 빈 반투명 영역이 남는다. 검색 전 크기를 유지하고 넘치면 스크롤한다.
     private var listHeight: CGFloat {
+        let projects = modeProjects
+        let favoriteCount = projects.flatMap(\.sessions).filter { favoriteIds.contains($0.id) }.count
         var needed: CGFloat = 16                       // LazyVStack 위아래 여백
-        if !showingHidden && !favoriteSessions.isEmpty {
+        if !showingHidden && favoriteCount > 0 {
             needed += 26 + 9                           // 섹션 헤더 + 구분선
-            if favoritesShown { needed += CGFloat(favoriteSessions.count) * 39 }
+            if favoritesExpanded { needed += CGFloat(favoriteCount) * 39 }
         }
-        for project in visibleProjects {
+        for project in projects {
             needed += 26                               // 그룹 헤더 한 줄
-            if isExpanded(project) {
+            if expanded.contains(project.id) {
                 needed += CGFloat(project.sessions.count) * 39   // 세션 행(2줄)
             }
         }
@@ -302,12 +320,7 @@ struct MenuBarView: View {
                 }
                 .padding(16)
             case .loaded:
-                if isSearching {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(L("search.noResults")).fontWeight(.medium)
-                    }
-                    .padding(16)
-                } else if showingHidden {
+                if showingHidden {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(L("hidden.empty")).fontWeight(.medium)
                     }
@@ -543,15 +556,19 @@ struct MenuBarView: View {
             .sorted { $0.modifiedAt > $1.modifiedAt }
     }
 
-    /// 모드와 검색어에 따라 보여줄 그룹. 세션이 하나도 안 남는 그룹은 빠진다.
-    private var visibleProjects: [Project] {
-        let byMode: [Project] = store.projects.compactMap { project in
+    /// 모드(평소/숨긴 세션)에 따라 보여줄 그룹. 세션이 하나도 안 남는 그룹은 빠진다.
+    private var modeProjects: [Project] {
+        store.projects.compactMap { project in
             let sessions = project.sessions.filter {
                 showingHidden ? hiddenIds.contains($0.id) : !hiddenIds.contains($0.id)
             }
             return sessions.isEmpty ? nil : Project(path: project.path, sessions: sessions)
         }
-        return SessionSearch.filter(byMode, query: searchText)
+    }
+
+    /// 화면에 그릴 그룹. 모드에 검색어 필터까지 거친다.
+    private var visibleProjects: [Project] {
+        SessionSearch.filter(modeProjects, query: searchText)
     }
 
     private var isSearching: Bool {
@@ -732,6 +749,38 @@ struct MenuBarView: View {
         guard let noticeSetAt, Date().timeIntervalSince(noticeSetAt) > 10 else { return }
         notice = nil
         self.noticeSetAt = nil
+    }
+}
+
+/// MenuBarExtra 창은 내용이 작아져도 줄지 않고, 한 번 직접 크기를 바꾸면 커지는 것도 따라오지
+/// 않는다. 줄어든 만큼이 빈 반투명 영역으로 남는다(그룹을 접거나 검색 결과가 줄 때).
+/// 그래서 내용 높이가 바뀔 때마다 창 높이를 직접 맞춘다. 메뉴바에 붙은 위쪽 모서리는 그대로 둔다.
+///
+/// 높이가 애니메이션되면 매 프레임 창을 바꾸게 되어 튀고 깜빡인다. 목록 높이가 바뀔 때는
+/// 애니메이션을 걸지 않으므로(body 참고) 한 번만 맞춘다.
+private struct WindowHeightFitter: NSViewRepresentable {
+    let height: CGFloat
+
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        // 내용과 같은 프레임에 창을 바꿔야 튀지 않는다. 다음 런루프로 미루면 새 높이의 내용이
+        // 옛 크기의 창에 한 프레임 그려진다. 창이 아직 없을 때(처음 붙을 때)만 미룬다.
+        if let window = view.window {
+            fit(window)
+        } else {
+            DispatchQueue.main.async { [weak view] in
+                if let window = view?.window { fit(window) }
+            }
+        }
+    }
+
+    private func fit(_ window: NSWindow) {
+        guard height > 0, abs(window.frame.height - height) > 0.5 else { return }
+        var frame = window.frame
+        frame.origin.y += frame.height - height
+        frame.size.height = height
+        window.setFrame(frame, display: true)
     }
 }
 
