@@ -39,3 +39,6 @@
 "favorites.title" = "Favorites";
 "search.placeholder" = "Search sessions";
 "search.noResults" = "No matching sessions";
+"retention.daysLeft %d" = "· deleted in %dd";
+"retention.soon" = "· deleted soon";
+"retention.help %d" = "Claude Code deletes session logs unused for %d days. Resume the session and send a message to restart the clock.";

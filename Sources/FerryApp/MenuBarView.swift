@@ -39,6 +39,7 @@ struct MenuBarView: View {
     /// ↑↓로 고른 행. 같은 세션이 즐겨찾기와 그룹 양쪽에 나오므로 세션 id가 아니라 행 키로 가리킨다.
     @State private var selectedRow: String?
     @State private var keyMonitor: Any?
+    @State private var retentionPeriod = SessionRetention.defaultPeriodDays
 
     private let remover = SessionRemover()
     private let renamer = SessionRenamer()
@@ -96,6 +97,7 @@ struct MenuBarView: View {
                 updatePendingMoves()
                 updateHidden()
                 updateFavorites()
+                retentionPeriod = SessionRetention.periodDays()
                 applyInitialExpansion()
                 loadState = .loaded
                 clearStaleNotice()
@@ -230,6 +232,8 @@ struct MenuBarView: View {
                    // 즐겨찾기 섹션 안에서는 섹션 자체가 그것을 말하므로 별표를 붙이지 않는다.
                    isFavorite: !inFavorites && favoriteIds.contains(session.id),
                    isSelected: selectedRow == key,
+                   daysUntilDeletion: SessionRetention.daysUntilDeletion(session, periodDays: retentionPeriod),
+                   retentionPeriod: retentionPeriod,
                    memoryCount: ProjectMemory.fileCount(for: session)) { open(session) }
             .id(key)
             .contextMenu {
@@ -829,6 +833,9 @@ private struct SessionRow: View {
     let isFavorite: Bool
     /// 키보드(↑↓)로 고른 행인가. Enter가 이 행을 연다.
     let isSelected: Bool
+    /// Claude Code가 이 로그를 지우기까지 남은 날. 곧 사라질 때만 값이 있다.
+    let daysUntilDeletion: Int?
+    let retentionPeriod: Int
     /// 이 프로젝트에 딸린 메모리 파일 수. 이동하면 따라가지 않으므로 툴팁에 밝힌다.
     let memoryCount: Int
     let action: () -> Void
@@ -865,7 +872,15 @@ private struct SessionRow: View {
                                       ? L("move.pendingWithMemory %1$@ %2$d", name, memoryCount)
                                       : L("move.pending %@", name))
                         }
+                        if let daysUntilDeletion {
+                            Text(daysUntilDeletion > 0
+                                 ? L("retention.daysLeft %d", daysUntilDeletion)
+                                 : L("retention.soon"))
+                                .foregroundStyle(.orange)
+                                .help(L("retention.help %d", retentionPeriod))
+                        }
                     }
+                    .lineLimit(1)   // 행 높이 계산(listHeight)이 두 줄을 가정한다
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 }

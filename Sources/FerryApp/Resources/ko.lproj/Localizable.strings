@@ -39,3 +39,6 @@
 "favorites.title" = "즐겨찾기";
 "search.placeholder" = "세션 검색";
 "search.noResults" = "일치하는 세션이 없습니다";
+"retention.daysLeft %d" = "· %d일 뒤 삭제";
+"retention.soon" = "· 곧 삭제";
+"retention.help %d" = "Claude Code는 %d일 동안 쓰지 않은 세션 로그를 지웁니다. 세션을 열어 메시지를 보내면 다시 시작됩니다.";
