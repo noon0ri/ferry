@@ -130,7 +130,7 @@ plutil -extract NSAppleEventsUsageDescription raw build/Ferry.app/Contents/Info.
 ## Development
 
 ```bash
-swift test      # 102 tests
+swift test      # 105 tests
 swift build
 ./Scripts/bundle.sh
 ```

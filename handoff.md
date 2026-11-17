@@ -5,7 +5,7 @@
 
 - 저장소: https://github.com/noon0ri/ferry (MIT, public)
 - 최신 릴리스: v0.1.8
-- 커밋 61개 · 테스트 102개
+- 커밋 62개 · 테스트 105개
 - 앱 설명은 [README.md](README.md) / [README.ko.md](README.ko.md)
 - 고치지 않기로 한 것들은 [docs/known-issues.md](docs/known-issues.md)
 
@@ -632,6 +632,12 @@ MenuBarExtraAccess(이 문제를 푸는 오픈소스) 소스에서 답을 찾았
 알림이 있었던 경우라 "열기만 하면 항상 갱신된다"고 일반화하지는 않았다. 툴팁은 "메시지를 보내면
 다시 시작된다"고 안내한다.
 
+**제목 폴백의 마크업.** 제목이 없는 세션은 첫 사용자 메시지로 폴백하는데, 그것이 슬래시 명령이면
+`<command-name>/goal</command-name>…` 원문이 그대로 보였다(known-issues에 있던 항목). 이제 "/goal 인자"로
+바꾸고, 그 밖에 `<`로 시작하는 마크업 메시지(`<local-command-caveat>` 등)는 건너뛰고 다음 메시지를 쓴다.
+태그 순서가 다른 변형(`command-message`가 먼저)도 실제 로그에 있어 테스트에 넣었다. 문제의 그 세션은
+고치려고 보니 이미 자동 삭제로 사라져 있었다.
+
 ---
 
 ## 14. 배포
@@ -678,7 +684,7 @@ macOS는 식별자로 앱을 구분하므로 자동화 권한이 초기화된다
 **빌드**
 
 ```bash
-swift test              # 102개
+swift test              # 105개
 ./Scripts/bundle.sh     # build/Ferry.app
 ```
 

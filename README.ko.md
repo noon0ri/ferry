@@ -142,7 +142,7 @@ plutil -extract NSAppleEventsUsageDescription raw build/Ferry.app/Contents/Info.
 ## 개발
 
 ```bash
-swift test      # 102개
+swift test      # 105개
 swift build
 ./Scripts/bundle.sh
 ```

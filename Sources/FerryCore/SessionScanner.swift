@@ -48,7 +48,7 @@ public struct SessionScanner {
             if fields.firstUserPrompt == nil,
                let type = record["type"] as? String, type == "user",
                let message = record["message"] as? [String: Any],
-               let prompt = extractText(from: message["content"]) {
+               let prompt = extractText(from: message["content"]).flatMap(readablePrompt) {
                 fields.firstUserPrompt = prompt
             }
         }
@@ -115,6 +115,28 @@ public struct SessionScanner {
         }
 
         return fields
+    }
+
+    /// 제목 폴백으로 쓸 수 있게 프롬프트를 다듬는다.
+    ///
+    /// 슬래시 명령은 `<command-name>/goal</command-name>…<command-args>인자</command-args>` 마크업으로
+    /// 기록된다. 그대로 제목이 되면 읽을 수 없으므로 "/goal 인자"로 바꾼다. 그 밖에 마크업으로 시작하는
+    /// 메시지(로컬 명령 출력, caveat 등)는 사람이 쓴 프롬프트가 아니므로 nil — 다음 메시지를 본다.
+    static func readablePrompt(_ text: String) -> String? {
+        if let name = tag("command-name", in: text) {
+            let args = tag("command-args", in: text)
+            return args.map { "\(name) \($0)" } ?? name
+        }
+        return text.hasPrefix("<") ? nil : text
+    }
+
+    /// `<name>값</name>`의 값. 없거나 비었으면 nil.
+    private static func tag(_ name: String, in text: String) -> String? {
+        guard let open = text.range(of: "<\(name)>"),
+              let close = text.range(of: "</\(name)>", range: open.upperBound..<text.endIndex)
+        else { return nil }
+        let value = text[open.upperBound..<close.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
     }
 
     /// content는 문자열이거나 `[{"type":"text","text":...}]` 배열이다.
